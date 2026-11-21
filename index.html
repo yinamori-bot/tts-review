@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="読み上げ修正">
+<meta name="theme-color" content="#3a5a8c">
+<title>読み上げ修正</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="row">
+      <button id="back" class="icon" hidden aria-label="一覧に戻る">‹</button>
+      <h1 id="title">読み上げ修正</h1>
+    </div>
+    <nav id="tabs" class="tabs" hidden>
+      <button data-tab="text" class="on">本文</button>
+      <button data-tab="issues">指摘 <span id="issue-count"></span></button>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <!-- 一覧 -->
+  <section id="v-home">
+    <div class="card">
+      <h2>取り込む</h2>
+      <p class="muted">iCloud Drive の「シュタイナー読み上げ / 修正作業」から、講の <b>.m4a と .json を一緒に</b>選びます。Macからの代案（返事_….json）も同じボタンで取り込めます。</p>
+      <label class="button primary big">ファイルを選ぶ<input id="import" type="file" multiple hidden></label>
+    </div>
+    <div id="chapters"></div>
+    <div class="card">
+      <h2>設定</h2>
+      <label class="field">指摘ボタンを押したとき、何秒前の箇所を指すか
+        <select id="set-delay"><option value="0">0秒</option><option value="0.5">0.5秒</option><option value="1">1秒</option><option value="1.5">1.5秒</option><option value="2">2秒</option></select>
+      </label>
+      <label class="field">戻る・進むの秒数
+        <select id="set-skip"><option value="3">3秒</option><option value="5">5秒</option><option value="10">10秒</option></select>
+      </label>
+      <label class="field">表示
+        <select id="set-theme"><option value="">端末に合わせる</option><option value="light">明るい</option><option value="dark">暗い</option></select>
+      </label>
+      <p class="muted small" id="storage-info"></p>
+    </div>
+  </section>
+
+  <!-- 講 -->
+  <section id="v-chapter" hidden>
+    <div id="v-text">
+      <div id="ver-warn" class="note warn" hidden></div>
+      <div id="units" class="units"></div>
+    </div>
+    <div id="v-issues" hidden>
+      <div class="card">
+        <div class="actions">
+          <button id="send" class="primary">Macに渡す</button>
+          <label class="check"><input id="passed" type="checkbox"> この講は合格</label>
+        </div>
+        <p class="muted small" id="send-info"></p>
+      </div>
+      <div class="filter" id="filter">
+        <button data-f="open" class="on">対応中</button>
+        <button data-f="done">済み</button>
+        <button data-f="all">すべて</button>
+      </div>
+      <div id="issues"></div>
+      <button id="del-ch" class="danger">この講を端末から消す</button>
+    </div>
+  </section>
+</main>
+
+<!-- 再生バー -->
+<div id="player" class="player" hidden>
+  <div class="seek">
+    <span id="t-now">0:00</span>
+    <input id="seek" type="range" min="0" max="1000" value="0" aria-label="再生位置">
+    <span id="t-dur">0:00</span>
+  </div>
+  <div class="controls">
+    <button id="rate" class="small-btn" aria-label="速さ">1.0×</button>
+    <button id="rew" class="ctl" aria-label="戻る">↺<small>5</small></button>
+    <button id="play" class="ctl play" aria-label="再生">▶</button>
+    <button id="fwd" class="ctl" aria-label="進む">↻<small>5</small></button>
+    <button id="flag" class="flag">⚑ 指摘</button>
+  </div>
+  <button id="follow" class="follow" hidden>現在地へ</button>
+</div>
+
+<!-- 指摘の入力 -->
+<div id="sheet-bg" class="sheet-bg" hidden></div>
+<div id="sheet" class="sheet" hidden role="dialog" aria-modal="true">
+  <div class="sheet-head">
+    <button id="s-cancel" class="link">やめる</button>
+    <b id="s-title">指摘</b>
+    <button id="s-save" class="link strong">保存</button>
+  </div>
+  <div class="sheet-body">
+    <div class="unit-pick">
+      <button id="s-prev" class="icon" aria-label="前の文">‹</button>
+      <div class="unit-meta"><span id="s-unit-no"></span> <button id="s-hear" class="small-btn">▶ この文を聞く</button></div>
+      <button id="s-next" class="icon" aria-label="次の文">›</button>
+    </div>
+    <p class="muted small">気になる語の<b>最初の字と最後の字</b>をタップ（もう一度タップで選び直し）</p>
+    <div id="s-chars" class="chars"></div>
+    <div id="s-read" class="read muted small"></div>
+
+    <div class="kinds" id="s-kinds">
+      <button data-k="読み">読み</button>
+      <button data-k="抑揚">抑揚</button>
+      <button data-k="間">間</button>
+      <button data-k="語尾">語尾の切れ</button>
+      <button data-k="崩れ">音の崩れ</button>
+      <button data-k="誤植">誤植</button>
+      <button data-k="その他">その他</button>
+    </div>
+
+    <div id="k-読み" class="kfield" hidden>
+      <label class="field">正しい読み（ひらがな）<input id="s-reading" type="text" autocomplete="off" placeholder="例: もくしろく"></label>
+      <label class="field">聞こえた読み（分かれば）<input id="s-heard" type="text" autocomplete="off" placeholder="例: ごくじろく"></label>
+    </div>
+    <div id="k-抑揚" class="kfield" hidden>
+      <p class="muted small">仮名1字ごとに 高(U)・低(D) を押す。例: エーテル体 = エ・ー・テ・ル・タ・イ → U U U U U U</p>
+      <div class="pat"><span id="s-pat" class="pat-show">（未入力）</span></div>
+      <div class="actions"><button id="p-u">高 U</button><button id="p-d">低 D</button><button id="p-bs">⌫</button><button id="p-clr">消す</button></div>
+      <label class="field">いまの聞こえ方（分かれば）<input id="s-heardpat" type="text" autocomplete="off" placeholder="例: U-DDUU"></label>
+    </div>
+    <div id="k-間" class="kfield" hidden>
+      <div class="kinds" id="s-gap">
+        <button data-g="長すぎる">間が長すぎる</button>
+        <button data-g="短すぎる">間が短すぎる</button>
+        <button data-g="間がほしい">ここで間がほしい</button>
+        <button data-g="切らないで">ここで切らないで</button>
+      </div>
+      <p class="muted small">選んだ語の<b>後ろ</b>の間として伝えます（語を選ばなければ文の後ろ）。</p>
+    </div>
+    <label class="field">メモ（キーボードのマイクで話しても可）<textarea id="s-note" rows="3"></textarea></label>
+    <p class="muted small" id="s-at"></p>
+    <button id="s-delete" class="danger" hidden>この指摘を消す</button>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+<audio id="audio" preload="auto"></audio>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

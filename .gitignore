@@ -1,0 +1,6 @@
+*.m4a
+*.wav
+指摘_*.json
+返事_*.json
+.DS_Store
+_test/
