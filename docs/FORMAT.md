@@ -39,6 +39,7 @@
     "pattern": "UUUUUU", "heardPattern": "U-DDUU",
     "gap": "長すぎる|短すぎる|間がほしい|切らないで",
     "note": "…",
+    "allSame": false,
     "verdicts": [{ "alt": "代案のid", "verdict": "good|ok|close|reject|", "note": "…", "at": "ISO" }],
     "decision": { "choice": "代案のid|none", "instruction": "全部不採用のときの新しい指示", "at": "ISO" },
     "replies": ["受け取った返事のid"]
@@ -47,6 +48,8 @@
 ```
 
 `verdicts` は案ごとの評価（◎良い・○可・△惜しい・×不可）とコメント。`decision` は指摘ごとの最終判断で、案を一つ選ぶ（`choice` が代案のid）か、`none`（全部不採用）で `instruction` に新しい指示を書く。判断がまだなら `null`。古い版のファイルには `verdict: "adopt"` が出ることがある（良い＋その案に決定、と読む）。
+
+`allSame: true` は「この講の同じ語もまとめて直す」。まずその文で代案を決め、決まった直し方を講の中の同じ語（語の切れ目が合うもの）に当てて、`batch` の返事で返す。
 
 `resolution`: `adopt:<代案のid>`（採用）、`closed`（本人が解決にした）、`fixed`（Macが反映済みと返した）。
 
@@ -57,11 +60,15 @@
   "format": "tts-review/reply", "version": 1, "chapter": "…", "created": "ISO",
   "items": [{
     "issue": "指摘のid", "id": "返事のid",
-    "status": "alts|fixed|cannot|question", "note": "Macからのひと言",
+    "status": "alts|fixed|cannot|question|batch", "note": "Macからのひと言",
     "alts": [{ "id": "…", "label": "案1 ひらがな", "note": "…", "mime": "audio/mp4", "dur": 3.2,
-               "data": "base64 の m4a" }]
+               "data": "base64 の m4a",
+               "unit": 70, "unitText": "…" }],          // batch のときだけ: その音がどの文か
+    "skipped": [{ "unit": 62, "text": "…", "reason": "採用済みの直しがある" }]   // batch のときだけ
   }]
 }
 ```
 
 `fixed` を受け取った指摘は「済み」になる。それ以外は「返事あり」になり、本人の評価を待つ。
+
+`batch` は一括の確認。`alts` の一つ一つが**別の文**（`unit`）の直した音で、アプリは「元（いまの講のその文）」と「新」を並べ、○（`good`）／×（`reject`）を付けてもらう。評価は普通の案と同じく `verdicts` で返る（○は講に入れる、×は引き直す、空はまだ）。`skipped` は当てなかった文とその理由（一覧に出すだけ）。採用済みの指摘に届いても「返事あり」に戻る。

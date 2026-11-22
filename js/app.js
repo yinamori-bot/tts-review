@@ -143,17 +143,21 @@ async function importReply(d) {
     i.replies = i.replies || [];
     // 前に取り込んだ返事は何もしない（全部まとめて選び直しても、判断や段階が戻らないように）
     if (it.id && i.replies.some(r => r.id === it.id)) continue;
-    i.replies.push({ id: it.id || uid(), at: d.created, note: it.note || '', status: it.status || 'alts' });
+    i.replies.push({ id: it.id || uid(), at: d.created, note: it.note || '', status: it.status || 'alts', skipped: it.skipped || [] });
     for (const a of it.alts || []) {
       if (await db.get('alts', a.id)) continue;
       const blob = await (await fetch(`data:${a.mime || 'audio/mp4'};base64,${a.data}`)).blob();
-      await db.put('alts', { id: a.id, issue: i.id, label: a.label || '代案', note: a.note || '', dur: a.dur || 0, blob, created: d.created });
+      const rec = { id: a.id, issue: i.id, label: a.label || '代案', note: a.note || '', dur: a.dur || 0, blob, created: d.created };
+      // 一括の確認: 同じ語を直した、別の文の音（unit がその文）
+      if (it.status === 'batch' && a.unit != null) Object.assign(rec, { batch: true, unit: a.unit, unitText: a.unitText || '' });
+      await db.put('alts', rec);
       na++;
     }
-    if ((it.alts || []).length && i.decision?.choice === 'none') {
+    if (it.status !== 'batch' && (it.alts || []).length && i.decision?.choice === 'none') {
       (i.pastDecisions = i.pastDecisions || []).push(i.decision); i.decision = null;
     }
     if (it.status === 'fixed') { i.stage = 'done'; i.resolution = i.resolution || 'fixed'; }
+    else if (it.status === 'batch') i.stage = 'answered';      // 採用済みの指摘でも、一括の確認を待つ
     else if (i.stage !== 'done') i.stage = 'answered';
     i.updated = new Date().toISOString();
     await db.put('issues', i); n++;
@@ -428,12 +432,13 @@ $('flag').onclick = () => {
 };
 
 function openSheet(base) {
-  draft = Object.assign({ id: null, kind: '', span: null, reading: '', heard: '', pattern: '', heardPattern: '', gap: '', note: '' }, structuredClone(base));
+  draft = Object.assign({ id: null, kind: '', span: null, reading: '', heard: '', pattern: '', heardPattern: '', gap: '', note: '', allSame: false }, structuredClone(base));
   anchor = -1;
   $('s-title').textContent = draft.id ? '指摘を直す' : '指摘';
   $('s-delete').hidden = !draft.id;
   $('s-reading').value = draft.reading; $('s-heard').value = draft.heard;
   $('s-heardpat').value = draft.heardPattern; $('s-note').value = draft.note;
+  $('s-allsame').checked = !!draft.allSame;
   $('s-at').textContent = draft.at != null ? `再生位置 ${fmt(draft.at)}` : '';
   renderSheetUnit(); renderKind(); renderPat();
   $('sheet').hidden = false; $('sheet-bg').hidden = false;
@@ -506,6 +511,8 @@ async function saveDraft(more) {
   if (saving || !draft) return;
   draft.reading = $('s-reading').value.trim(); draft.heard = $('s-heard').value.trim();
   draft.heardPattern = $('s-heardpat').value.trim().toUpperCase(); draft.note = $('s-note').value.trim();
+  draft.allSame = $('s-allsame').checked;
+  if (draft.allSame && !draft.span) { toast('「同じ語もまとめて」には、語の最初と最後の字を選んでください'); return; }
   if (!draft.kind) { toast('種類（読み・抑揚・間…）を選んでください'); return; }
   saving = true;
   try {
@@ -516,7 +523,7 @@ async function saveDraft(more) {
     unit: draft.unit, unitText: u.display, unitRead: u.read, unitKey: u.key, t0: u.t0,
     at: draft.at, kind: draft.kind, span: draft.span, reading: draft.reading, heard: draft.heard,
     pattern: draft.kind === '抑揚' ? draft.pattern : '', heardPattern: draft.kind === '抑揚' ? draft.heardPattern : '',
-    gap: draft.kind === '間' ? draft.gap : '', note: draft.note, updated: now, unsent: true,
+    gap: draft.kind === '間' ? draft.gap : '', note: draft.note, allSame: !!draft.allSame, updated: now, unsent: true,
   });
   if (!old) i.audioId = ch.audioId;
   if (old && old.stage === 'sent') i.stage = 'new';
@@ -558,6 +565,7 @@ function describe(i) {
   else if (i.kind === '抑揚') out.push(`抑揚${w}${i.pattern ? ' → <b>' + esc(i.pattern) + '</b>' : ''}${i.heardPattern ? `（聞こえ: ${esc(i.heardPattern)}）` : ''}`);
   else if (i.kind === '間') out.push(`間${w}${i.gap ? '：<b>' + esc(i.gap) + '</b>' : ''}`);
   else out.push(`${esc(i.kind === '語尾' ? '語尾の切れ' : i.kind === '崩れ' ? '音の崩れ' : i.kind)}${w}`);
+  if (i.allSame) out.push('<span class="tag">この講の同じ語もまとめて</span>');
   if (i.note) out.push(esc(i.note));
   return out.join('<br>');
 }
@@ -602,6 +610,31 @@ function proposalsHtml(i, as) {
   </div>`;
 }
 
+// 一括の確認: 講の中の同じ語を同じ直し方で直した文を並べ、○（これで良い）／×（だめ）を付けてもらう
+const skippedOf = i => (i.replies || []).flatMap(r => r.skipped || []);
+function batchHtml(i, bat) {
+  const rated = bat.filter(a => i.verdicts[a.id]?.v).length;
+  const rows = bat.map(a => {
+    const v = i.verdicts[a.id] || {};
+    const u = ch.units[a.unit];
+    return `<div class="alt balt" data-alt="${a.id}">
+      <div class="small muted">#${a.unit + 1}・${fmt(u?.t0 ?? 0)}${a.note ? '・' + esc(a.note) : ''}</div>
+      <div class="btxt">${esc(a.unitText || u?.display || '')}</div>
+      <div class="arow"><button class="pbtn" data-act="borig" data-k="${a.unit}" title="元の音">元</button><button class="pbtn" data-act="alt" title="直した音">新</button>
+        <div class="verdicts" style="flex:1;margin-top:0">${[['good', '○ これで良い'], ['reject', '× だめ']].map(([k, t]) => `<button data-v="${k}" class="${v.v === k ? 'on' : ''}">${t}</button>`).join('')}</div></div>
+      ${v.v === 'reject' ? `<input data-act="vnote" placeholder="どこがだめか（任意）" value="${esc(v.note || '')}">` : ''}
+    </div>`;
+  }).join('');
+  const sk = skippedOf(i).map(x => `<li>#${x.unit + 1} ${esc(x.text || ch.units[x.unit]?.display || '')}<span class="muted">（${esc(x.reason || '')}）</span></li>`).join('');
+  return `<div class="props batch">
+    <div class="props-h">一括の確認 ${bat.length} 文（${rated}/${bat.length} 済み）</div>
+    <p class="muted small">同じ語を同じ直し方で直した文です。「元」と「新」を聞き比べ、だめなものだけ × を。</p>
+    ${bat.length ? `<button data-act="ballgood" class="small-btn">まだ付けていない文を全部 ○ にする</button>` : ''}
+    ${rows}
+    ${sk ? `<div class="muted small" style="margin-top:8px">触っていない文:</div><ul class="skipped small">${sk}</ul>` : ''}
+  </div>`;
+}
+
 function renderIssues() {
   issues.forEach(normIssue);
   if (!ch) return;
@@ -614,7 +647,8 @@ function renderIssues() {
   $('issues').innerHTML = list.map(i => {
     const as = (alts.get(i.id) || []).sort((a, b) => (a.created || '').localeCompare(b.created || '') || a.label.localeCompare(b.label, 'ja'));
     const replies = (i.replies || []).filter(r => r.note).map(r => `<div class="reply">Mac: ${esc(r.note)}</div>`).join('');
-    const altHtml = as.length ? proposalsHtml(i, as) : '';
+    const own = as.filter(a => !a.batch), bat = as.filter(a => a.batch).sort((a, b) => a.unit - b.unit);
+    const altHtml = (own.length ? proposalsHtml(i, own) : '') + (bat.length || skippedOf(i).length ? batchHtml(i, bat) : '');
     const old = i.audioId && i.audioId !== ch.audioId ? ' ・前の版' : '';
     const res = i.resolution === 'fixed' ? '（Macで反映済み）' : i.resolution?.startsWith('adopt:') ? '（採用した案あり）' : i.resolution === 'closed' ? '（解決にした）' : '';
     return `<div class="issue" data-id="${i.id}" data-st="${i.stage}">
@@ -677,6 +711,17 @@ $('issues').addEventListener('click', async e => {
   else if (act === 'edit') openSheet(i);
   else if (act === 'add') openSheet({ unit: i.unit, at: ch.units[i.unit]?.t0 ?? i.t0 });
   else if (act === 'alt') playAlt(a, e.target);
+  else if (act === 'borig') {
+    const btn = e.target; altAudio.pause();
+    document.querySelectorAll('.playing-btn').forEach(b => b.classList.remove('playing-btn'));
+    btn.classList.add('playing-btn');
+    playUnit(+btn.dataset.k, () => btn.classList.remove('playing-btn'));
+  }
+  else if (act === 'ballgood') {
+    const now = new Date().toISOString();
+    for (const b of (alts.get(i.id) || []).filter(x => x.batch)) if (!i.verdicts[b.id]?.v) i.verdicts[b.id] = Object.assign(i.verdicts[b.id] || {}, { v: 'good', at: now });
+    await touch(i);
+  }
   else if (act === 'close') { i.stage = 'done'; i.resolution = i.resolution || 'closed'; await touch(i); }
   else if (act === 'reopen') { i.stage = (alts.get(i.id) || []).length ? 'answered' : 'new'; i.resolution = null; i.decision = null; await touch(i); }
   else if (v && a) {
@@ -737,7 +782,7 @@ $('send').onclick = async () => {
       unit: i.unit, unitKey: i.unitKey, unitText: i.unitText, unitRead: i.unitRead, audioId: i.audioId,
       t0: ch.units[i.unit]?.t0 ?? i.t0, at: i.at, kind: i.kind, span: i.span,
       reading: i.reading, heard: i.heard, pattern: i.pattern, heardPattern: i.heardPattern, gap: i.gap,
-      note: i.note, created: i.created, updated: i.updated,
+      note: i.note, allSame: !!i.allSame, created: i.created, updated: i.updated,
       verdicts: Object.entries(i.verdicts || {}).filter(([, v]) => v.v || v.note).map(([alt, v]) => ({ alt, verdict: v.v || '', note: v.note || '', at: v.at })),
       decision: i.decision ? { choice: i.decision.choice, instruction: i.decision.instruction || '', at: i.decision.at } : null,
       replies: (i.replies || []).map(r => r.id),

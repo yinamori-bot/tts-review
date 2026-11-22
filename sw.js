@@ -1,5 +1,5 @@
 // Offline shell: same-origin app files only, network first. Audio and notes live in IndexedDB, not here.
-const CACHE = 'ttsr-v7';
+const CACHE = 'ttsr-v8';
 const ASSETS = ['./', 'index.html', 'style.css', 'js/app.js', 'js/db.js', 'manifest.webmanifest', 'icon.svg', 'icon.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS))); self.skipWaiting(); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k.startsWith('ttsr-') && k !== CACHE).map(k => caches.delete(k))))); self.clients.claim(); });

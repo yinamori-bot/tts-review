@@ -166,3 +166,9 @@ p { margin: 6px 0; }
 .chars span.other { text-decoration: underline wavy var(--flag); text-underline-offset: 5px; }
 .more { display: block; width: 100%; margin-top: 8px; }
 .existing button[data-new] { border-color: var(--accent); color: var(--accent); }
+.allsame { margin-top: 12px; font-size: 15px; }
+.tag { display: inline-block; font-size: 12px; padding: 0 8px; border-radius: 999px; background: var(--soft); border: 1px solid var(--border); }
+.batch .balt .btxt { margin: 2px 0 6px; font-size: 15px; }
+.batch .pbtn { font-size: 13px; }
+.batch .arow { align-items: center; }
+.skipped { margin: 4px 0 0; padding-left: 18px; }
