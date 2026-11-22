@@ -40,7 +40,9 @@
     "gap": "長すぎる|短すぎる|間がほしい|切らないで",
     "note": "…",
     "allSame": false,
-    "verdicts": [{ "alt": "代案のid", "verdict": "good|ok|close|reject|", "note": "…", "at": "ISO" }],
+    "verdicts": [{ "alt": "代案のid", "verdict": "good|ok|close|reject|", "note": "…", "at": "ISO",
+                   "spots": { "指摘のid": "ok|ng" } }],      // まとめた案のときだけ: 語ごとの良い・だめ
+    "group": ["代表のid", "…"], "groupOf": "代表のid",          // まとめた案のときだけ
     "decision": { "choice": "代案のid|none", "instruction": "全部不採用のときの新しい指示", "at": "ISO" },
     "replies": ["受け取った返事のid"]
   }]
@@ -60,6 +62,7 @@
   "format": "tts-review/reply", "version": 1, "chapter": "…", "created": "ISO",
   "items": [{
     "issue": "指摘のid", "id": "返事のid",
+    "issues": ["代表のid", "同じ文のほかの指摘のid"],   // 任意: 同じ文の指摘をまとめた案
     "status": "alts|fixed|cannot|question|batch", "note": "Macからのひと言",
     "alts": [{ "id": "…", "label": "案1 ひらがな", "note": "…", "mime": "audio/mp4", "dur": 3.2,
                "data": "base64 の m4a",
@@ -70,5 +73,7 @@
 ```
 
 `fixed` を受け取った指摘は「済み」になる。それ以外は「返事あり」になり、本人の評価を待つ。
+
+`issues` があれば、同じ文の指摘をまとめた案。案は代表（`issue`）のカードに出し、ほかの指摘には「代表の案でまとめて判断」と出る。案ごとに語ごとの良い・だめ（`spots`）を付けてもらい、最終判断は代表で一度だけ。判断はほかの指摘にも写る（`decision.via` が代表）。
 
 `batch` は一括の確認。`alts` の一つ一つが**別の文**（`unit`）の直した音で、アプリは「元（いまの講のその文）」と「新」を並べ、○（`good`）／×（`reject`）を付けてもらう。評価は普通の案と同じく `verdicts` で返る（○は講に入れる、×は引き直す、空はまだ）。`skipped` は当てなかった文とその理由（一覧に出すだけ）。採用済みの指摘に届いても「返事あり」に戻る。

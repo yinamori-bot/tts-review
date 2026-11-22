@@ -176,3 +176,9 @@ p { margin: 6px 0; }
 .batch .pbtn { font-size: 13px; }
 .batch .arow { align-items: center; }
 .skipped { margin: 4px 0 0; padding-left: 18px; }
+.spots { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.spot { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.spot span { flex: 1; }
+.spot button { padding: 4px 12px; border-radius: 8px; font-size: 13px; }
+.spot button.on.ok { background: var(--s-done); color: #fff; border-color: var(--s-done); }
+.spot button.on.ng { background: var(--s-new); color: #fff; border-color: var(--s-new); }

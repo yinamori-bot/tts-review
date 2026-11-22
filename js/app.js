@@ -140,6 +140,20 @@ async function importReply(d) {
   for (const it of d.items || []) {
     const i = await db.get('issues', it.issue);
     if (!i) continue;
+    // 同じ文の指摘をまとめた案: it.issue（代表）に案を入れ、ほかの指摘は「代表の案でまとめて判断」にする
+    const group = (it.issues || []).filter(x => x !== i.id);
+    if (group.length) {
+      i.group = [i.id, ...group];
+      for (const gid of group) {
+        const g = await db.get('issues', gid); if (!g) continue;
+        g.groupOf = i.id; g.replies = g.replies || [];
+        if (!g.replies.some(r => r.id === it.id)) g.replies.push({ id: it.id, at: d.created, note: '', status: 'group' });
+        if (g.stage !== 'done' || it.status !== 'fixed') g.stage = it.status === 'fixed' ? 'done' : 'answered';
+        if (it.status === 'fixed') g.resolution = g.resolution || 'fixed';
+        g.updated = new Date().toISOString();
+        await db.put('issues', g);
+      }
+    }
     i.replies = i.replies || [];
     // 前に取り込んだ返事は何もしない（全部まとめて選び直しても、判断や段階が戻らないように）
     if (it.id && i.replies.some(r => r.id === it.id)) continue;
@@ -590,6 +604,14 @@ function normIssue(i) {
   for (const v of Object.values(i.verdicts)) if (v.v === 'adopt') v.v = 'good';   // 前の版の「採用」
   if (!i.decision && i.resolution?.startsWith('adopt:')) i.decision = { choice: i.resolution.slice(6) };
 }
+// まとめた案の、語ごとの評価（良い・だめ）。i.spots[案のid][指摘のid] = 'ok' | 'ng'
+const groupOf = i => (i.group || [i.id]).map(id => issues.find(x => x.id === id)).filter(Boolean);
+function spotsHtml(i, a) {
+  const grp = groupOf(i); if (grp.length < 2) return '';
+  const sp = (i.spots || {})[a.id] || {};
+  return `<div class="spots">${grp.map(g => `<div class="spot"><span>「${esc(g.span?.text || g.kind)}」</span>
+    <button data-spot="${g.id}" data-sv="ok" class="${sp[g.id] === 'ok' ? 'on ok' : ''}">良い</button><button data-spot="${g.id}" data-sv="ng" class="${sp[g.id] === 'ng' ? 'on ng' : ''}">だめ</button></div>`).join('')}</div>`;
+}
 const shortLabel = a => (a.label.match(/^案\s*\d+/) || [a.label])[0];
 function proposalsHtml(i, as) {
   const d = i.decision || {};
@@ -599,14 +621,17 @@ function proposalsHtml(i, as) {
       <div class="arow"><button class="pbtn" data-act="alt">▶</button>
         <div><div class="lbl">${esc(a.label)}</div>${a.note ? `<div class="muted small">${esc(a.note)}</div>` : ''}</div></div>
       <div class="verdicts">${RATE.map(([k, t]) => `<button data-v="${k}" class="${v.v === k ? 'on' : ''}">${t}</button>`).join('')}</div>
+      ${spotsHtml(i, a)}
       <input data-act="vnote" placeholder="この案へのコメント" value="${esc(v.note || '')}">
     </div>`;
   }).join('');
   const choices = as.map(a => `<button data-choice="${a.id}" class="${d.choice === a.id ? 'on' : ''}">${esc(shortLabel(a))}にする</button>`).join('')
     + `<button data-choice="none" class="none ${d.choice === 'none' ? 'on' : ''}">全部不採用</button>`;
   const past = (i.pastDecisions || []).filter(p => p.instruction).map(p => `<div class="muted small">前に出した指示: ${esc(p.instruction)}</div>`).join('');
+  const grp = groupOf(i);
   return `<div class="props">
-    <div class="props-h">提案 ${as.length} 案</div>
+    <div class="props-h">${grp.length > 1 ? `この文の指摘 ${grp.length} 件（${grp.map(g => esc(g.span?.text || g.kind)).join('・')}）をまとめた案 ${as.length} 案` : `提案 ${as.length} 案`}</div>
+    ${grp.length > 1 ? '<p class="muted small">案ごとに、指摘した語それぞれが「良い」か「だめ」かも押してください。</p>' : ''}
     <div class="arow orig"><button class="pbtn" data-act="orig">▶</button><div class="lbl">元の音</div></div>
     ${rows}
     <div class="decide">
@@ -656,7 +681,9 @@ function renderIssues() {
     const as = (alts.get(i.id) || []).sort((a, b) => (a.created || '').localeCompare(b.created || '') || a.label.localeCompare(b.label, 'ja'));
     const replies = (i.replies || []).filter(r => r.note).map(r => `<div class="reply">Mac: ${esc(r.note)}</div>`).join('');
     const own = as.filter(a => !a.batch), bat = as.filter(a => a.batch).sort((a, b) => a.unit - b.unit);
-    const altHtml = (own.length ? proposalsHtml(i, own) : '') + (bat.length || skippedOf(i).length ? batchHtml(i, bat) : '');
+    const lead = i.groupOf && issues.find(x => x.id === i.groupOf);
+    const altHtml = lead ? `<div class="reply">この文の指摘は、#${lead.unit + 1}「${esc(lead.span?.text || lead.kind)}」のカードの案でまとめて判断します。 <button data-act="golead" data-lead="${lead.id}" class="small-btn">まとめた案へ</button></div>`
+      : (own.length ? proposalsHtml(i, own) : '') + (bat.length || skippedOf(i).length ? batchHtml(i, bat) : '');
     const old = i.audioId && i.audioId !== ch.audioId ? ' ・前の版' : '';
     const res = i.resolution === 'fixed' ? '（Macで反映済み）' : i.resolution?.startsWith('adopt:') ? '（採用した案あり）' : i.resolution === 'closed' ? '（解決にした）' : '';
     return `<div class="issue" data-id="${i.id}" data-st="${i.stage}">
@@ -719,6 +746,13 @@ $('issues').addEventListener('click', async e => {
   else if (act === 'edit') openSheet(i);
   else if (act === 'add') openSheet({ unit: i.unit, at: ch.units[i.unit]?.t0 ?? i.t0 });
   else if (act === 'alt') playAlt(a, e.target);
+  else if (act === 'golead') { const el = $('issues').querySelector(`.issue[data-id="${e.target.dataset.lead}"]`); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); else toast('「すべて」で探してください'); }
+  else if (e.target.dataset.spot && a) {
+    i.spots = i.spots || {}; const sp = i.spots[a.id] = i.spots[a.id] || {};
+    const g = e.target.dataset.spot, sv = e.target.dataset.sv;
+    sp[g] = sp[g] === sv ? '' : sv;
+    await touch(i);
+  }
   else if (act === 'borig') {
     const btn = e.target; altAudio.pause();
     document.querySelectorAll('.playing-btn').forEach(b => b.classList.remove('playing-btn'));
@@ -744,6 +778,12 @@ $('issues').addEventListener('click', async e => {
       i.decision = { choice: c, instruction: c === 'none' ? (i.decision?.instruction || '') : '', at: new Date().toISOString() };
       if (c === 'none') { i.stage = 'answered'; i.resolution = null; }
       else { i.stage = 'done'; i.resolution = 'adopt:' + c; }
+    }
+    // まとめた案なら、同じ文のほかの指摘も同じ判断にする
+    for (const g of groupOf(i)) {
+      if (g.id === i.id) continue;
+      g.decision = i.decision ? { ...i.decision, via: i.id } : null; g.stage = i.stage; g.resolution = i.resolution;
+      g.unsent = true; g.updated = new Date().toISOString(); await db.put('issues', g);
     }
     await touch(i);
     if (c === 'none' && i.decision) $('issues').querySelector(`.issue[data-id="${i.id}"] textarea`)?.focus();
@@ -791,7 +831,11 @@ $('send').onclick = async () => {
       t0: ch.units[i.unit]?.t0 ?? i.t0, at: i.at, kind: i.kind, span: i.span,
       reading: i.reading, heard: i.heard, pattern: i.pattern, heardPattern: i.heardPattern, gap: i.gap,
       note: i.note, allSame: !!i.allSame, created: i.created, updated: i.updated,
-      verdicts: Object.entries(i.verdicts || {}).filter(([, v]) => v.v || v.note).map(([alt, v]) => ({ alt, verdict: v.v || '', note: v.note || '', at: v.at })),
+      verdicts: [...new Set([...Object.keys(i.verdicts || {}), ...Object.keys(i.spots || {})])]
+        .map(alt => ({ alt, v: (i.verdicts || {})[alt] || {}, sp: Object.fromEntries(Object.entries((i.spots || {})[alt] || {}).filter(([, x]) => x)) }))
+        .filter(({ v, sp }) => v.v || v.note || Object.keys(sp).length)
+        .map(({ alt, v, sp }) => ({ alt, verdict: v.v || '', note: v.note || '', at: v.at, ...(Object.keys(sp).length ? { spots: sp } : {}) })),
+      group: i.group || null, groupOf: i.groupOf || null,
       decision: i.decision ? { choice: i.decision.choice, instruction: i.decision.instruction || '', at: i.decision.at } : null,
       replies: (i.replies || []).map(r => r.id),
     })),
