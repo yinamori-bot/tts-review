@@ -257,17 +257,23 @@ function loadMarks() {
 function saveMarks() {
   db.save('marks:' + ch.id, [...marks].sort((a, b) => a - b).map(k => ({ k, key: ch.units[k].key })));
   unitEls.forEach((el, k) => el.classList.toggle('marked', marks.has(k)));
-  $('next-mark').textContent = `● 次の印へ（${marks.size}）`;
-  $('next-mark').hidden = !marks.size;
+  $('mark-n').textContent = marks.size;
+  $('nav-mark').hidden = !marks.size;
   $('mark-count').textContent = marks.size ? `(${marks.size})` : '';
   if (filter === 'marked' && ch) renderIssues();
 }
 function unmark(k) { if (marks.delete(k)) saveMarks(); }
-$('next-mark').onclick = () => {
-  if (!marks.size) return;
-  const ks = [...marks].sort((a, b) => a - b);
-  const from = curIdx;
-  const k = ks.find(x => x > from) ?? ks[0];
+// 本文の「前・次」: 左の印（●）と右のポッチ（指摘のある文）を、いまの文から前後へたどる（端まで行ったら反対の端へ）
+function step(ks, d) {
+  if (!ks.length) return;
+  ks = [...ks].sort((a, b) => a - b);
+  const k = d > 0 ? (ks.find(x => x > curIdx) ?? ks[0]) : ([...ks].reverse().find(x => x < curIdx) ?? ks[ks.length - 1]);
+  jumpTo(k);
+}
+const issueUnits = () => [...new Set(issues.map(i => i.unit))];
+$('nav-mark').onclick = e => { const d = +e.target.closest('button')?.dataset.d; if (d) step([...marks], d); };
+$('nav-iss').onclick = e => { const d = +e.target.closest('button')?.dataset.d; if (d) step(issueUnits(), d); };
+function jumpTo(k) {
   stopSeg(); altAudio.pause();
   seekTo(ch.units[k].t0 + 0.01);
   manualScrollAt = 0; $('follow').hidden = true;
@@ -302,6 +308,8 @@ function markDots() {
   unitEls.forEach((el, k) => { const s = st.get(k); if (s) el.dataset.st = s; else delete el.dataset.st; });
   const open = issues.filter(i => i.stage !== 'done').length;
   $('issue-count').textContent = open ? `(${open})` : '';
+  const n = issueUnits().length;
+  $('iss-n').textContent = n; $('nav-iss').hidden = !n;
 }
 
 function findUnit(t) {

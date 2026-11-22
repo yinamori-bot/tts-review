@@ -91,7 +91,10 @@
     <button id="flag" class="flag">⚑ 指摘</button>
   </div>
   <button id="follow" class="follow" hidden>現在地へ</button>
-  <button id="next-mark" class="next-mark" hidden></button>
+  <div class="navs">
+    <div id="nav-mark" class="nav mark" hidden><button data-d="-1" aria-label="前の印">‹</button><span>● 印 <b id="mark-n"></b></span><button data-d="1" aria-label="次の印">›</button></div>
+    <div id="nav-iss" class="nav iss" hidden><button data-d="-1" aria-label="前の指摘">‹</button><span>指摘 <b id="iss-n"></b></span><button data-d="1" aria-label="次の指摘">›</button></div>
+  </div>
 </div>
 
 <!-- 指摘の入力 -->

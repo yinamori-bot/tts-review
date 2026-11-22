@@ -76,7 +76,7 @@ p { margin: 6px 0; }
 
 /* 本文 */
 .units { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 6px 0; }
-.u { padding: 6px 14px 6px 30px; position: relative; border-left: 4px solid transparent; }
+.u { padding: 6px 30px 6px 30px; position: relative; border-left: 4px solid transparent; }
 .u.heading { font-weight: 700; padding-top: 12px; }
 .u.para { margin-top: 10px; }
 .u.cur { background: var(--cur-bg); color: var(--cur-fg); border-left-color: var(--accent); }
@@ -156,7 +156,11 @@ p { margin: 6px 0; }
 .playing-btn { background: var(--accent) !important; color: var(--accent-text) !important; }
 
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 160px); z-index: 40; background: #222; color: #fff; padding: 10px 16px; border-radius: 12px; font-size: 14px; max-width: 90vw; text-align: center; white-space: pre-line; }
-.next-mark { position: absolute; left: 12px; top: -44px; border-radius: 999px; background: var(--surface); color: var(--text); border: 1px solid var(--flag); padding: 6px 14px; font-size: 14px; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
+.navs { position: absolute; left: 12px; top: -44px; display: flex; gap: 6px; }
+.nav { display: flex; align-items: center; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); box-shadow: 0 2px 8px rgba(0,0,0,.2); font-size: 13px; white-space: nowrap; }
+.nav.mark { border-color: var(--flag); } .nav.iss { border-color: var(--s-ans); }
+.nav button { border: 0; background: none; padding: 5px 11px; font-size: 18px; line-height: 1; color: var(--accent); }
+.nav span { padding: 0 2px; }
 
 .existing { margin: 8px 0; padding: 8px; border: 1px solid var(--s-new); border-radius: 8px; }
 .existing button { display: block; margin-top: 6px; text-align: left; }
