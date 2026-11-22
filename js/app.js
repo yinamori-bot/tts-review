@@ -446,9 +446,11 @@ function renderSheetUnit() {
   $('s-unit-no').textContent = `${draft.unit + 1}/${ch.units.length}・${fmt(u.t0)}`;
   const chars = [...u.display];
   const s = draft.span;
+  const others = issuesOn(draft.unit).filter(i => i.id !== draft.id && i.span).map(i => i.span);
   $('s-chars').innerHTML = chars.map((c, k) => {
     const cls = [];
     if (s && k >= s.s && k <= s.e) cls.push('sel');
+    if (others.some(o => k >= o.s && k <= o.e)) cls.push('other');
     if (anchor === k) cls.push('anchor');
     return `<span data-c="${k}" class="${cls.join(' ')}">${esc(c)}</span>`;
   }).join('');
@@ -457,12 +459,14 @@ function renderSheetUnit() {
   // 同じ文にもう指摘があれば、新しく作らずにそれを直せるようにする
   const same = issuesOn(draft.unit).filter(i => i.id !== draft.id);
   const box = $('s-existing');
-  box.hidden = !same.length;
-  box.innerHTML = same.length ? `<div class="small">${draft.id ? 'この文にはほかにも指摘があります' : 'この文にはもう指摘があります。直すならこちら（このまま保存すると別の指摘として増えます）'}</div>`
-    + same.map(i => `<button data-edit="${i.id}" class="small-btn">${describe(i).replace(/<br>.*/, '')}（${new Date(i.updated || i.created).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}）を直す</button>`).join('') : '';
+  box.hidden = !same.length && !draft.id;
+  box.innerHTML = (same.length ? `<div class="small">この文のほかの指摘（赤い下線の所）。直すならタップ。${draft.id ? '' : '別の箇所なら、このまま語を選んで保存すれば新しい指摘になります。'}</div>` : '')
+    + same.map(i => `<button data-edit="${i.id}" class="small-btn">${describe(i).replace(/<br>.*/, '')}（${new Date(i.updated || i.created).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}）を直す</button>`).join('')
+    + (draft.id ? '<button data-new="1" class="small-btn">＋ この文に新しい指摘</button>' : '');
 }
 function issuesOn(k) { return issues.filter(i => i.chapter === ch.id && i.unit === k).sort((a, b) => (b.updated || '').localeCompare(a.updated || '')); }
 $('s-existing').addEventListener('click', e => {
+  if (e.target.closest('[data-new]')) { openSheet({ unit: draft.unit, at: draft.at }); return; }
   const b = e.target.closest('[data-edit]'); if (!b) return;
   const i = issues.find(x => x.id === b.dataset.edit); if (i) openSheet(i);
 });
@@ -497,7 +501,8 @@ $('p-clr').onclick = () => { draft.pattern = ''; renderPat(); };
 $('s-cancel').onclick = closeSheet;
 $('sheet-bg').onclick = closeSheet;
 let saving = false;
-$('s-save').onclick = async () => {
+// more: 保存したあと、同じ文の新しい指摘をすぐ開く（1文に何箇所も指摘するとき）
+async function saveDraft(more) {
   if (saving || !draft) return;
   draft.reading = $('s-reading').value.trim(); draft.heard = $('s-heard').value.trim();
   draft.heardPattern = $('s-heardpat').value.trim().toUpperCase(); draft.note = $('s-note').value.trim();
@@ -518,10 +523,19 @@ $('s-save').onclick = async () => {
   await db.put('issues', i);
   if (!old) issues.push(i);
   unmark(i.unit);
+  if (more) {
+    const at = draft.at;
+    markDots(); renderIssues();
+    openSheet({ unit: i.unit, at });
+    toast(`${old ? '直しました' : '保存しました'}。同じ文の別の箇所を選んでください`);
+    return;
+  }
   closeSheet(); markDots(); renderIssues();
   toast(old ? '直しました' : filter === 'marked' && !$('v-issues').hidden ? '指摘を保存しました。「対応中」に移りました' : '指摘を保存しました（「指摘」タブ → Macに渡す）');
   } finally { saving = false; }
-};
+}
+$('s-save').onclick = () => saveDraft(false);
+$('s-more').onclick = () => saveDraft(true);
 $('s-delete').onclick = async () => {
   if (!confirm('この指摘を消しますか？')) return;
   await db.del('issues', draft.id);
@@ -608,7 +622,7 @@ function renderIssues() {
       <div class="txt">${markText(i)}</div>
       <div class="what">${describe(i)}</div>
       <div class="actions" style="margin-top:8px">
-        <button data-act="orig">▶ 元の音</button><button data-act="jump">本文で見る</button><button data-act="edit">直す</button>
+        <button data-act="orig">▶ 元の音</button><button data-act="jump">本文で見る</button><button data-act="edit">直す</button><button data-act="add">同じ文に足す</button>
         ${i.stage === 'done' ? '<button data-act="reopen">対応中に戻す</button>' : '<button data-act="close">解決にする</button>'}
       </div>
       ${replies}${altHtml}
@@ -661,6 +675,7 @@ $('issues').addEventListener('click', async e => {
   }
   else if (act === 'jump') { showTab('text'); seekTo(ch.units[i.unit].t0 + 0.01); manualScrollAt = 0; setCur(i.unit); scrollToCur(true); updateTime(); }
   else if (act === 'edit') openSheet(i);
+  else if (act === 'add') openSheet({ unit: i.unit, at: ch.units[i.unit]?.t0 ?? i.t0 });
   else if (act === 'alt') playAlt(a, e.target);
   else if (act === 'close') { i.stage = 'done'; i.resolution = i.resolution || 'closed'; await touch(i); }
   else if (act === 'reopen') { i.stage = (alts.get(i.id) || []).length ? 'answered' : 'new'; i.resolution = null; i.decision = null; await touch(i); }
