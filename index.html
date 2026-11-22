@@ -23,6 +23,12 @@
       <button data-tab="text" class="on">本文</button>
       <button data-tab="issues">指摘 <span id="issue-count"></span></button>
     </nav>
+    <div class="filter" id="filter" hidden>
+      <button data-f="marked">指摘前 <span id="mark-count"></span></button>
+      <button data-f="open" class="on">対応中</button>
+      <button data-f="done">済み</button>
+      <button data-f="all">すべて</button>
+    </div>
   </div>
 </header>
 
@@ -63,11 +69,6 @@
           <label class="check"><input id="passed" type="checkbox"> この講は合格</label>
         </div>
         <p class="muted small" id="send-info"></p>
-      </div>
-      <div class="filter" id="filter">
-        <button data-f="open" class="on">対応中</button>
-        <button data-f="done">済み</button>
-        <button data-f="all">すべて</button>
       </div>
       <div id="issues"></div>
       <button id="del-ch" class="danger">この講を端末から消す</button>

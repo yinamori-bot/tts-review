@@ -122,7 +122,7 @@ p { margin: 6px 0; }
 .pat-show { font-family: ui-monospace, Menlo, monospace; font-size: 22px; letter-spacing: .25em; }
 
 /* 指摘の一覧 */
-.filter { display: flex; gap: 6px; margin-bottom: 10px; }
+.filter { display: flex; gap: 6px; padding: 2px 0 8px; }
 .filter button { flex: 1; border-radius: 999px; padding: 6px 0; font-size: 14px; }
 .filter button.on { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
 .issue { background: var(--surface); border: 1px solid var(--border); border-left: 5px solid var(--s-new); border-radius: 12px; padding: 12px; margin-bottom: 10px; }
@@ -160,3 +160,6 @@ p { margin: 6px 0; }
 
 .existing { margin: 8px 0; padding: 8px; border: 1px solid var(--s-new); border-radius: 8px; }
 .existing button { display: block; margin-top: 6px; text-align: left; }
+
+.flag-sm { background: var(--flag); color: var(--flag-text); border-color: var(--flag); font-weight: 700; }
+.mcard { border-left-color: var(--flag); }

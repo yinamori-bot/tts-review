@@ -210,7 +210,7 @@ function goHome() {
   audio.pause(); altAudio.pause();
   ch = null; curIdx = -1;
   $('title').textContent = '読み上げ修正';
-  $('back').hidden = true; $('tabs').hidden = true;
+  $('back').hidden = true; $('tabs').hidden = true; $('filter').hidden = true;
   $('v-home').hidden = false; $('v-chapter').hidden = true;
   $('player').hidden = true; document.body.classList.remove('has-player');
   history.replaceState(null, '', location.pathname);
@@ -221,6 +221,7 @@ $('back').onclick = goHome;
 function showTab(t) {
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
   $('v-text').hidden = t !== 'text'; $('v-issues').hidden = t !== 'issues';
+  $('filter').hidden = t !== 'issues';      // 指摘前・対応中・済み・すべて は上の帯に出し、一覧を下へ送っても消えない
   if (t === 'text' && curIdx >= 0) scrollToCur(true);
 }
 document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => showTab(b.dataset.tab));
@@ -254,6 +255,8 @@ function saveMarks() {
   unitEls.forEach((el, k) => el.classList.toggle('marked', marks.has(k)));
   $('next-mark').textContent = `● 次の印へ（${marks.size}）`;
   $('next-mark').hidden = !marks.size;
+  $('mark-count').textContent = marks.size ? `(${marks.size})` : '';
+  if (filter === 'marked' && ch) renderIssues();
 }
 function unmark(k) { if (marks.delete(k)) saveMarks(); }
 $('next-mark').onclick = () => {
@@ -516,7 +519,7 @@ $('s-save').onclick = async () => {
   if (!old) issues.push(i);
   unmark(i.unit);
   closeSheet(); markDots(); renderIssues();
-  toast(old ? '直しました' : '指摘を保存しました（「指摘」タブ → Macに渡す）');
+  toast(old ? '直しました' : filter === 'marked' && !$('v-issues').hidden ? '指摘を保存しました。「対応中」に移りました' : '指摘を保存しました（「指摘」タブ → Macに渡す）');
   } finally { saving = false; }
 };
 $('s-delete').onclick = async () => {
@@ -588,6 +591,7 @@ function proposalsHtml(i, as) {
 function renderIssues() {
   issues.forEach(normIssue);
   if (!ch) return;
+  if (filter === 'marked') { renderMarked(); return; }
   const list = issues.filter(i => filter === 'all' || (filter === 'done' ? i.stage === 'done' : i.stage !== 'done'))
     .sort((a, b) => (STAGE_RANK[b.stage] - STAGE_RANK[a.stage]) || (a.unit - b.unit));
   const unsent = issues.filter(i => i.unsent).length;
@@ -612,7 +616,38 @@ function renderIssues() {
   }).join('');
 }
 
+// 指摘前: 左の印を付けた文の一覧。「⚑ 指摘」で入力し、保存すると印が消えて「対応中」に移る。
+function renderMarked() {
+  const ks = [...marks].sort((a, b) => a - b);
+  if (!ks.length) { $('issues').innerHTML = '<p class="muted card">印の付いた文はありません。本文の左端の丸をタップすると印が付き、ここに並びます。</p>'; return; }
+  $('issues').innerHTML = ks.map(k => {
+    const u = ch.units[k];
+    const has = issuesOn(k).length ? '<span>この文にはもう指摘があります</span>' : '<span></span>';
+    return `<div class="issue mcard" data-k="${k}">
+      <div class="head"><span>#${k + 1}・${fmt(u.t0)}</span>${has}</div>
+      <div class="txt">${esc(u.display)}</div>
+      <div class="actions" style="margin-top:8px">
+        <button data-act="flag" class="flag-sm">⚑ 指摘</button><button data-act="orig">▶ この文を聞く</button><button data-act="jump">本文で見る</button><button data-act="unmark">印を消す</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
 $('issues').addEventListener('click', async e => {
+  const mc = e.target.closest('.mcard');
+  if (mc) {
+    const k = +mc.dataset.k, act = e.target.dataset.act;
+    if (act === 'flag') { audio.pause(); stopSeg(); altAudio.pause(); openSheet({ unit: k, at: ch.units[k].t0 }); }
+    else if (act === 'orig') {
+      const btn = e.target;
+      document.querySelectorAll('.playing-btn').forEach(b => b.classList.remove('playing-btn'));
+      btn.classList.add('playing-btn');
+      playUnit(k, () => btn.classList.remove('playing-btn'));
+    }
+    else if (act === 'jump') { showTab('text'); seekTo(ch.units[k].t0 + 0.01); manualScrollAt = 0; setCur(k); scrollToCur(true); updateTime(); }
+    else if (act === 'unmark') unmark(k);
+    return;
+  }
   const card = e.target.closest('.issue'); if (!card) return;
   const i = issues.find(x => x.id === card.dataset.id); if (!i) return;
   const altEl = e.target.closest('.alt');
