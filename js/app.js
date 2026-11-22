@@ -148,6 +148,9 @@ async function importReply(d) {
       await db.put('alts', { id: a.id, issue: i.id, label: a.label || '代案', note: a.note || '', dur: a.dur || 0, blob, created: d.created });
       na++;
     }
+    if ((it.alts || []).length && i.decision?.choice === 'none') {
+      (i.pastDecisions = i.pastDecisions || []).push(i.decision); i.decision = null;
+    }
     if (it.status === 'fixed') { i.stage = 'done'; i.resolution = i.resolution || 'fixed'; }
     else if (i.stage !== 'done') i.stage = 'answered';
     i.updated = new Date().toISOString();
@@ -379,7 +382,7 @@ function playRange(t0, t1, then) {
   altAudio.pause();
   seekTo(Math.max(0, t0 - 0.05));
   seg = { end: t1 + 0.15, then };
-  audio.play();
+  audio.play().catch(() => {});
 }
 function playUnit(k, then) { const u = ch.units[k]; playRange(u.t0, u.t1, then); }
 function playAlt(a, btn) {
@@ -390,7 +393,7 @@ function playAlt(a, btn) {
   document.querySelectorAll('.playing-btn').forEach(b => b.classList.remove('playing-btn'));
   btn?.classList.add('playing-btn');
   altAudio.onended = altAudio.onpause = () => btn?.classList.remove('playing-btn');
-  altAudio.play();
+  altAudio.play().catch(() => {});
 }
 
 function setMediaSession() {
@@ -525,7 +528,43 @@ function markText(i) {
   return esc(chars.slice(0, i.span.s).join('')) + '<mark>' + esc(chars.slice(i.span.s, i.span.e + 1).join('')) + '</mark>' + esc(chars.slice(i.span.e + 1).join(''));
 }
 
+// 評価（各案）と最終判断（どれか一つ／全部不採用）は別のもの。
+const RATE = [['good', '◎ 良い'], ['ok', '○ 可'], ['close', '△ 惜しい'], ['reject', '× 不可']];
+function normIssue(i) {
+  i.verdicts = i.verdicts || {};
+  for (const v of Object.values(i.verdicts)) if (v.v === 'adopt') v.v = 'good';   // 前の版の「採用」
+  if (!i.decision && i.resolution?.startsWith('adopt:')) i.decision = { choice: i.resolution.slice(6) };
+}
+const shortLabel = a => (a.label.match(/^案\s*\d+/) || [a.label])[0];
+function proposalsHtml(i, as) {
+  const d = i.decision || {};
+  const rows = as.map(a => {
+    const v = i.verdicts[a.id] || {};
+    return `<div class="alt" data-alt="${a.id}">
+      <div class="arow"><button class="pbtn" data-act="alt">▶</button>
+        <div><div class="lbl">${esc(a.label)}</div>${a.note ? `<div class="muted small">${esc(a.note)}</div>` : ''}</div></div>
+      <div class="verdicts">${RATE.map(([k, t]) => `<button data-v="${k}" class="${v.v === k ? 'on' : ''}">${t}</button>`).join('')}</div>
+      <input data-act="vnote" placeholder="この案へのコメント" value="${esc(v.note || '')}">
+    </div>`;
+  }).join('');
+  const choices = as.map(a => `<button data-choice="${a.id}" class="${d.choice === a.id ? 'on' : ''}">${esc(shortLabel(a))}にする</button>`).join('')
+    + `<button data-choice="none" class="none ${d.choice === 'none' ? 'on' : ''}">全部不採用</button>`;
+  const past = (i.pastDecisions || []).filter(p => p.instruction).map(p => `<div class="muted small">前に出した指示: ${esc(p.instruction)}</div>`).join('');
+  return `<div class="props">
+    <div class="props-h">提案 ${as.length} 案</div>
+    <div class="arow orig"><button class="pbtn" data-act="orig">▶</button><div class="lbl">元の音</div></div>
+    ${rows}
+    <div class="decide">
+      <div class="props-h">最終判断</div>
+      <div class="choices">${choices}</div>
+      ${d.choice === 'none' ? `<textarea data-act="instr" rows="3" placeholder="新しい指示（どう直してほしいか。例: 「の」を上げたまま、もう少しゆっくり）">${esc(d.instruction || '')}</textarea>` : ''}
+      ${past}
+    </div>
+  </div>`;
+}
+
 function renderIssues() {
+  issues.forEach(normIssue);
   if (!ch) return;
   const list = issues.filter(i => filter === 'all' || (filter === 'done' ? i.stage === 'done' : i.stage !== 'done'))
     .sort((a, b) => (STAGE_RANK[b.stage] - STAGE_RANK[a.stage]) || (a.unit - b.unit));
@@ -535,19 +574,7 @@ function renderIssues() {
   $('issues').innerHTML = list.map(i => {
     const as = (alts.get(i.id) || []).sort((a, b) => (a.created || '').localeCompare(b.created || '') || a.label.localeCompare(b.label, 'ja'));
     const replies = (i.replies || []).filter(r => r.note).map(r => `<div class="reply">Mac: ${esc(r.note)}</div>`).join('');
-    const altHtml = as.map(a => {
-      const v = i.verdicts?.[a.id] || {};
-      return `<div class="alt" data-alt="${a.id}">
-        <div class="lbl">${esc(a.label)}</div>${a.note ? `<div class="muted small">${esc(a.note)}</div>` : ''}
-        <div class="actions" style="margin-top:6px"><button data-act="alt">▶ 案</button><button data-act="ab">▶ 元→案</button></div>
-        <div class="verdicts">
-          <button data-v="adopt" class="${v.v === 'adopt' ? 'on' : ''}">◎ 採用</button>
-          <button data-v="close" class="${v.v === 'close' ? 'on' : ''}">△ 惜しい</button>
-          <button data-v="reject" class="${v.v === 'reject' ? 'on' : ''}">× 不可</button>
-        </div>
-        <input data-act="vnote" placeholder="ひと言（どこが良い・悪い）" value="${esc(v.note || '')}">
-      </div>`;
-    }).join('');
+    const altHtml = as.length ? proposalsHtml(i, as) : '';
     const old = i.audioId && i.audioId !== ch.audioId ? ' ・前の版' : '';
     const res = i.resolution === 'fixed' ? '（Macで反映済み）' : i.resolution?.startsWith('adopt:') ? '（採用した案あり）' : i.resolution === 'closed' ? '（解決にした）' : '';
     return `<div class="issue" data-id="${i.id}" data-st="${i.stage}">
@@ -569,27 +596,46 @@ $('issues').addEventListener('click', async e => {
   const altEl = e.target.closest('.alt');
   const a = altEl ? (alts.get(i.id) || []).find(x => x.id === altEl.dataset.alt) : null;
   const act = e.target.dataset.act, v = e.target.dataset.v;
-  if (act === 'orig') playUnit(i.unit);
+  if (act === 'orig') {
+    const btn = e.target;
+    document.querySelectorAll('.playing-btn').forEach(b => b.classList.remove('playing-btn'));
+    btn.classList.add('playing-btn');
+    playUnit(i.unit, () => btn.classList.remove('playing-btn'));
+  }
   else if (act === 'jump') { showTab('text'); seekTo(ch.units[i.unit].t0 + 0.01); manualScrollAt = 0; setCur(i.unit); scrollToCur(true); updateTime(); }
   else if (act === 'edit') openSheet(i);
   else if (act === 'alt') playAlt(a, e.target);
-  else if (act === 'ab') { const btn = e.target; btn.classList.add('playing-btn'); playUnit(i.unit, () => setTimeout(() => playAlt(a, btn), 350)); }
   else if (act === 'close') { i.stage = 'done'; i.resolution = i.resolution || 'closed'; await touch(i); }
-  else if (act === 'reopen') { i.stage = (alts.get(i.id) || []).length ? 'answered' : 'new'; i.resolution = null; await touch(i); }
+  else if (act === 'reopen') { i.stage = (alts.get(i.id) || []).length ? 'answered' : 'new'; i.resolution = null; i.decision = null; await touch(i); }
   else if (v && a) {
-    i.verdicts = i.verdicts || {};
     const cur = i.verdicts[a.id] || {};
     cur.v = cur.v === v ? '' : v; cur.at = new Date().toISOString();
     i.verdicts[a.id] = cur;
-    if (cur.v === 'adopt') {
-      for (const [k, x] of Object.entries(i.verdicts)) if (k !== a.id && x.v === 'adopt') x.v = '';
-      i.stage = 'done'; i.resolution = 'adopt:' + a.id;
-    } else if (i.resolution === 'adopt:' + a.id) { i.stage = 'answered'; i.resolution = null; }
     await touch(i);
+  } else if (e.target.dataset.choice) {
+    const c = e.target.dataset.choice;
+    if (i.decision?.choice === c) { i.decision = null; i.stage = 'answered'; i.resolution = null; }
+    else {
+      i.decision = { choice: c, instruction: c === 'none' ? (i.decision?.instruction || '') : '', at: new Date().toISOString() };
+      if (c === 'none') { i.stage = 'answered'; i.resolution = null; }
+      else { i.stage = 'done'; i.resolution = 'adopt:' + c; }
+    }
+    await touch(i);
+    if (c === 'none' && i.decision) $('issues').querySelector(`.issue[data-id="${i.id}"] textarea`)?.focus();
   }
 });
 $('issues').addEventListener('change', async e => {
-  if (e.target.dataset.act !== 'vnote') return;
+  const act = e.target.dataset.act;
+  if (act === 'instr') {
+    const i = issues.find(x => x.id === e.target.closest('.issue').dataset.id);
+    if (!i.decision) return;
+    i.decision.instruction = e.target.value.trim(); i.decision.at = new Date().toISOString();
+    i.unsent = true; i.updated = new Date().toISOString();
+    await db.put('issues', i);
+    $('send-info').textContent = `まだMacに渡していない変更: ${issues.filter(x => x.unsent).length} 件`;
+    return;
+  }
+  if (act !== 'vnote') return;
   const i = issues.find(x => x.id === e.target.closest('.issue').dataset.id);
   const id = e.target.closest('.alt').dataset.alt;
   i.verdicts = i.verdicts || {};
@@ -605,9 +651,11 @@ $('passed').onchange = async e => { ch.passed = e.target.checked; ch.passedChang
 // ---------------------------------------------------------------- Macに渡す
 $('send').onclick = async () => {
   const name = `指摘_${ch.id}.json`;
+  const noInstr = issues.filter(i => i.decision?.choice === 'none' && !i.decision.instruction);
+  if (noInstr.length && !confirm(`「全部不採用」で新しい指示が空の指摘が ${noInstr.length} 件あります。このまま渡しますか？`)) return;
   // 渡したあとの段階で書き出す（Macが読む時点では「返事待ち」になっているので）
   const nextStage = i => !i.unsent ? i.stage
-    : (i.stage === 'new' || (i.stage === 'answered' && Object.values(i.verdicts || {}).some(v => v.v))) ? 'sent' : i.stage;
+    : (i.stage === 'new' || (i.stage === 'answered' && (i.decision?.choice === 'none' || Object.values(i.verdicts || {}).some(v => v.v || v.note)))) ? 'sent' : i.stage;
   const out = {
     format: 'tts-review/feedback', version: 1, exportedAt: new Date().toISOString(),
     chapter: { id: ch.id, title: ch.title, audioId: ch.audioId, passed: !!ch.passed },
@@ -619,6 +667,7 @@ $('send').onclick = async () => {
       reading: i.reading, heard: i.heard, pattern: i.pattern, heardPattern: i.heardPattern, gap: i.gap,
       note: i.note, created: i.created, updated: i.updated,
       verdicts: Object.entries(i.verdicts || {}).filter(([, v]) => v.v || v.note).map(([alt, v]) => ({ alt, verdict: v.v || '', note: v.note || '', at: v.at })),
+      decision: i.decision ? { choice: i.decision.choice, instruction: i.decision.instruction || '', at: i.decision.at } : null,
       replies: (i.replies || []).map(r => r.id),
     })),
   };

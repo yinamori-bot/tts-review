@@ -39,11 +39,14 @@
     "pattern": "UUUUUU", "heardPattern": "U-DDUU",
     "gap": "長すぎる|短すぎる|間がほしい|切らないで",
     "note": "…",
-    "verdicts": [{ "alt": "代案のid", "verdict": "adopt|close|reject|", "note": "…", "at": "ISO" }],
+    "verdicts": [{ "alt": "代案のid", "verdict": "good|ok|close|reject|", "note": "…", "at": "ISO" }],
+    "decision": { "choice": "代案のid|none", "instruction": "全部不採用のときの新しい指示", "at": "ISO" },
     "replies": ["受け取った返事のid"]
   }]
 }
 ```
+
+`verdicts` は案ごとの評価（◎良い・○可・△惜しい・×不可）とコメント。`decision` は指摘ごとの最終判断で、案を一つ選ぶ（`choice` が代案のid）か、`none`（全部不採用）で `instruction` に新しい指示を書く。判断がまだなら `null`。古い版のファイルには `verdict: "adopt"` が出ることがある（良い＋その案に決定、と読む）。
 
 `resolution`: `adopt:<代案のid>`（採用）、`closed`（本人が解決にした）、`fixed`（Macが反映済みと返した）。
 
