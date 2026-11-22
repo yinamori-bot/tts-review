@@ -141,7 +141,9 @@ async function importReply(d) {
     const i = await db.get('issues', it.issue);
     if (!i) continue;
     i.replies = i.replies || [];
-    if (!i.replies.some(r => r.id === it.id)) i.replies.push({ id: it.id || uid(), at: d.created, note: it.note || '', status: it.status || 'alts' });
+    // 前に取り込んだ返事は何もしない（全部まとめて選び直しても、判断や段階が戻らないように）
+    if (it.id && i.replies.some(r => r.id === it.id)) continue;
+    i.replies.push({ id: it.id || uid(), at: d.created, note: it.note || '', status: it.status || 'alts' });
     for (const a of it.alts || []) {
       if (await db.get('alts', a.id)) continue;
       const blob = await (await fetch(`data:${a.mime || 'audio/mp4'};base64,${a.data}`)).blob();
@@ -156,7 +158,7 @@ async function importReply(d) {
     i.updated = new Date().toISOString();
     await db.put('issues', i); n++;
   }
-  return `返事を入れました: 指摘 ${n} 件・代案 ${na} 本`;
+  return n ? `返事を入れました: 指摘 ${n} 件・代案 ${na} 本` : 'この返事はもう取り込んであります';
 }
 
 // ---------------------------------------------------------------- 講を開く
