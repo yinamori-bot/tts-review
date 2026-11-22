@@ -274,6 +274,10 @@ $('units').addEventListener('click', e => {
     return;
   }
   const k = +el.dataset.k;
+  if (el.dataset.st && e.clientX > el.getBoundingClientRect().right - 40) {   // 右端のポッチ → その指摘を直す
+    const list = issuesOn(k); const i = list.find(x => x.stage !== 'done') || list[0];
+    if (i) { audio.pause(); stopSeg(); openSheet(i); return; }
+  }
   stopSeg(); altAudio.pause();
   seekTo(ch.units[k].t0 + 0.01);
   setCur(k); manualScrollAt = 0; $('follow').hidden = true;
@@ -445,7 +449,18 @@ function renderSheetUnit() {
   }).join('');
   $('s-read').textContent = u.read !== u.display ? `合成器に渡した字: ${u.read}` : '';
   $('s-prev').disabled = draft.unit <= 0; $('s-next').disabled = draft.unit >= ch.units.length - 1;
+  // 同じ文にもう指摘があれば、新しく作らずにそれを直せるようにする
+  const same = issuesOn(draft.unit).filter(i => i.id !== draft.id);
+  const box = $('s-existing');
+  box.hidden = !same.length;
+  box.innerHTML = same.length ? `<div class="small">${draft.id ? 'この文にはほかにも指摘があります' : 'この文にはもう指摘があります。直すならこちら（このまま保存すると別の指摘として増えます）'}</div>`
+    + same.map(i => `<button data-edit="${i.id}" class="small-btn">${describe(i).replace(/<br>.*/, '')}（${new Date(i.updated || i.created).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}）を直す</button>`).join('') : '';
 }
+function issuesOn(k) { return issues.filter(i => i.chapter === ch.id && i.unit === k).sort((a, b) => (b.updated || '').localeCompare(a.updated || '')); }
+$('s-existing').addEventListener('click', e => {
+  const b = e.target.closest('[data-edit]'); if (!b) return;
+  const i = issues.find(x => x.id === b.dataset.edit); if (i) openSheet(i);
+});
 $('s-chars').addEventListener('click', e => {
   const sp = e.target.closest('span[data-c]'); if (!sp) return;
   const k = +sp.dataset.c;
@@ -476,10 +491,14 @@ $('p-clr').onclick = () => { draft.pattern = ''; renderPat(); };
 
 $('s-cancel').onclick = closeSheet;
 $('sheet-bg').onclick = closeSheet;
+let saving = false;
 $('s-save').onclick = async () => {
+  if (saving || !draft) return;
   draft.reading = $('s-reading').value.trim(); draft.heard = $('s-heard').value.trim();
   draft.heardPattern = $('s-heardpat').value.trim().toUpperCase(); draft.note = $('s-note').value.trim();
   if (!draft.kind) { toast('種類（読み・抑揚・間…）を選んでください'); return; }
+  saving = true;
+  try {
   const u = ch.units[draft.unit];
   const now = new Date().toISOString();
   const old = draft.id ? issues.find(i => i.id === draft.id) : null;
@@ -496,6 +515,7 @@ $('s-save').onclick = async () => {
   unmark(i.unit);
   closeSheet(); markDots(); renderIssues();
   toast(old ? '直しました' : '指摘を保存しました（「指摘」タブ → Macに渡す）');
+  } finally { saving = false; }
 };
 $('s-delete').onclick = async () => {
   if (!confirm('この指摘を消しますか？')) return;
