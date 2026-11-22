@@ -224,13 +224,52 @@ document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => showTab
 function renderUnits() {
   const box = $('units');
   box.innerHTML = ch.units.map((u, k) =>
-    `<div class="u ${u.kind}" data-k="${k}"><span class="tm">${fmt(u.t0)}</span>${esc(u.display)}<i class="dot"></i></div>`).join('');
+    `<div class="u ${u.kind}" data-k="${k}"><i class="mk"></i><span class="tm">${fmt(u.t0)}</span>${esc(u.display)}<i class="dot"></i></div>`).join('');
   unitEls = [...box.children];
   curIdx = -1;
+  loadMarks();
   markDots();
 }
+
+// 左の印: 聞きながら「あとで指摘する」文に付けておく。指摘を保存するとその文の印は消える。
+// 版が変わっても付け直せるよう、文の番号と倉庫のキーを一緒に覚える。
+let marks = new Set();
+function loadMarks() {
+  marks = new Set();
+  for (const m of db.load('marks:' + ch.id, [])) {
+    if (ch.units[m.k]?.key === m.key) { marks.add(m.k); continue; }
+    let best = -1;
+    ch.units.forEach((u, k) => { if (u.key === m.key && (best < 0 || Math.abs(k - m.k) < Math.abs(best - m.k))) best = k; });
+    if (best >= 0) marks.add(best);
+  }
+  saveMarks();
+}
+function saveMarks() {
+  db.save('marks:' + ch.id, [...marks].sort((a, b) => a - b).map(k => ({ k, key: ch.units[k].key })));
+  unitEls.forEach((el, k) => el.classList.toggle('marked', marks.has(k)));
+  $('next-mark').textContent = `● 次の印へ（${marks.size}）`;
+  $('next-mark').hidden = !marks.size;
+}
+function unmark(k) { if (marks.delete(k)) saveMarks(); }
+$('next-mark').onclick = () => {
+  if (!marks.size) return;
+  const ks = [...marks].sort((a, b) => a - b);
+  const from = curIdx;
+  const k = ks.find(x => x > from) ?? ks[0];
+  stopSeg(); altAudio.pause();
+  seekTo(ch.units[k].t0 + 0.01);
+  manualScrollAt = 0; $('follow').hidden = true;
+  setCur(k); scrollToCur(true); updateTime();
+};
+
 $('units').addEventListener('click', e => {
   const el = e.target.closest('.u'); if (!el) return;
+  if (e.target.closest('.mk')) {
+    const k = +el.dataset.k;
+    if (marks.has(k)) marks.delete(k); else marks.add(k);
+    saveMarks();
+    return;
+  }
   const k = +el.dataset.k;
   stopSeg(); altAudio.pause();
   seekTo(ch.units[k].t0 + 0.01);
@@ -451,6 +490,7 @@ $('s-save').onclick = async () => {
   if (old && old.stage === 'sent') i.stage = 'new';
   await db.put('issues', i);
   if (!old) issues.push(i);
+  unmark(i.unit);
   closeSheet(); markDots(); renderIssues();
   toast(old ? '直しました' : '指摘を保存しました（「指摘」タブ → Macに渡す）');
 };

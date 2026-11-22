@@ -76,13 +76,16 @@ p { margin: 6px 0; }
 
 /* 本文 */
 .units { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 6px 0; }
-.u { padding: 6px 14px 6px 16px; position: relative; border-left: 4px solid transparent; }
+.u { padding: 6px 14px 6px 30px; position: relative; border-left: 4px solid transparent; }
 .u.heading { font-weight: 700; padding-top: 12px; }
 .u.para { margin-top: 10px; }
 .u.cur { background: var(--cur-bg); color: var(--cur-fg); border-left-color: var(--accent); }
 .u .tm { font-size: 11px; color: var(--muted); margin-right: 6px; font-variant-numeric: tabular-nums; }
 .u.cur .tm { color: inherit; opacity: .7; }
 .u .dot { position: absolute; right: 8px; top: 8px; width: 9px; height: 9px; border-radius: 50%; }
+.u .mk { position: absolute; left: 0; top: 0; bottom: 0; width: 30px; }
+.u .mk::after { content: ""; position: absolute; left: 9px; top: 8px; width: 9px; height: 9px; border-radius: 50%; border: 1px solid var(--border); box-sizing: border-box; }
+.u.marked .mk::after { background: var(--flag); border-color: var(--flag); }
 .u[data-st="new"] .dot { background: var(--s-new); }
 .u[data-st="sent"] .dot { background: var(--s-sent); }
 .u[data-st="answered"] .dot { background: var(--s-ans); }
@@ -142,3 +145,4 @@ p { margin: 6px 0; }
 .playing-btn { background: var(--accent) !important; color: var(--accent-text) !important; }
 
 .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 160px); z-index: 40; background: #222; color: #fff; padding: 10px 16px; border-radius: 12px; font-size: 14px; max-width: 90vw; text-align: center; white-space: pre-line; }
+.next-mark { position: absolute; left: 12px; top: -44px; border-radius: 999px; background: var(--surface); color: var(--text); border: 1px solid var(--flag); padding: 6px 14px; font-size: 14px; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
