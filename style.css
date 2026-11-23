@@ -182,3 +182,4 @@ p { margin: 6px 0; }
 .spot button { padding: 4px 12px; border-radius: 8px; font-size: 13px; }
 .spot button.on.ok { background: var(--s-done); color: #fff; border-color: var(--s-done); }
 .spot button.on.ng { background: var(--s-new); color: #fff; border-color: var(--s-new); }
+.issue .member { margin-top: 4px; padding-left: 8px; border-left: 3px solid var(--border); }

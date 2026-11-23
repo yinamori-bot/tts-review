@@ -672,7 +672,9 @@ function renderIssues() {
   issues.forEach(normIssue);
   if (!ch) return;
   if (filter === 'marked') { renderMarked(); return; }
-  const list = issues.filter(i => filter === 'all' || (filter === 'done' ? i.stage === 'done' : i.stage !== 'done'))
+  // まとめた案の仲間（groupOf）は別のカードにせず、代表のカードの中に一行で出す
+  const isMember = i => i.groupOf && i.groupOf !== i.id && issues.some(x => x.id === i.groupOf);
+  const list = issues.filter(i => !isMember(i) && (filter === 'all' || (filter === 'done' ? i.stage === 'done' : i.stage !== 'done')))
     .sort((a, b) => (STAGE_RANK[b.stage] - STAGE_RANK[a.stage]) || (a.unit - b.unit));
   const unsent = issues.filter(i => i.unsent).length;
   $('send-info').textContent = unsent ? `まだMacに渡していない変更: ${unsent} 件` : (ch.sentAt ? `最後に渡した: ${new Date(ch.sentAt).toLocaleString('ja-JP')}` : '');
@@ -690,6 +692,7 @@ function renderIssues() {
       <div class="head"><span>#${i.unit + 1}・${fmt(ch.units[i.unit]?.t0 ?? i.t0)}${old}</span><span>${STAGE[i.stage]}${i.unsent && i.stage !== 'new' ? '・未送付の変更' : ''}${res}</span></div>
       <div class="txt">${markText(i)}</div>
       <div class="what">${describe(i)}</div>
+      ${groupOf(i).filter(g => g.id !== i.id).map(g => `<div class="member"><span class="muted small">この案でまとめて判断：</span>${describe(g)} <button data-act="medit" data-mid="${g.id}" class="small-btn">直す</button></div>`).join('')}
       <div class="actions" style="margin-top:8px">
         <button data-act="orig">▶ 元の音</button><button data-act="jump">本文で見る</button><button data-act="edit">直す</button><button data-act="add">同じ文に足す</button>
         ${i.stage === 'done' ? '<button data-act="reopen">対応中に戻す</button>' : '<button data-act="close">解決にする</button>'}
@@ -744,6 +747,7 @@ $('issues').addEventListener('click', async e => {
   }
   else if (act === 'jump') { showTab('text'); seekTo(ch.units[i.unit].t0 + 0.01); manualScrollAt = 0; setCur(i.unit); scrollToCur(true); updateTime(); }
   else if (act === 'edit') openSheet(i);
+  else if (act === 'medit') { const m = issues.find(x => x.id === e.target.dataset.mid); if (m) openSheet(m); }
   else if (act === 'add') openSheet({ unit: i.unit, at: ch.units[i.unit]?.t0 ?? i.t0 });
   else if (act === 'alt') playAlt(a, e.target);
   else if (act === 'golead') { const el = $('issues').querySelector(`.issue[data-id="${e.target.dataset.lead}"]`); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); else toast('「すべて」で探してください'); }
