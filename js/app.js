@@ -459,10 +459,10 @@ function openSheet(base) {
   $('s-title').textContent = draft.id ? '指摘を直す' : '指摘';
   $('s-delete').hidden = !draft.id;
   $('s-reading').value = draft.reading; $('s-heard').value = draft.heard;
-  $('s-heardpat').value = draft.heardPattern; $('s-note').value = draft.note;
+  $('s-note').value = draft.note;
   $('s-allsame').checked = !!draft.allSame;
   $('s-at').textContent = draft.at != null ? `再生位置 ${fmt(draft.at)}` : '';
-  renderSheetUnit(); renderKind(); renderPat();
+  renderSheetUnit(); renderKind(); renderPat(); renderHPat();
   $('sheet').hidden = false; $('sheet-bg').hidden = false;
   $('sheet').querySelector('.sheet-body').scrollTop = 0;
 }
@@ -524,6 +524,12 @@ $('p-u').onclick = () => { draft.pattern += 'U'; renderPat(); };
 $('p-d').onclick = () => { draft.pattern += 'D'; renderPat(); };
 $('p-bs').onclick = () => { draft.pattern = draft.pattern.slice(0, -1); renderPat(); };
 $('p-clr').onclick = () => { draft.pattern = ''; renderPat(); };
+// いまの聞こえ方も同じ U/D ボタンで入れる（前は文字入力だった）
+function renderHPat() { const h = draft.heardPattern; $('s-hpat').textContent = h ? h.split('').join(' ') + `（${h.replace(/[^UD]/g, '').length}字）` : '（未入力）'; }
+$('hp-u').onclick = () => { draft.heardPattern += 'U'; renderHPat(); };
+$('hp-d').onclick = () => { draft.heardPattern += 'D'; renderHPat(); };
+$('hp-bs').onclick = () => { draft.heardPattern = draft.heardPattern.slice(0, -1); renderHPat(); };
+$('hp-clr').onclick = () => { draft.heardPattern = ''; renderHPat(); };
 
 $('s-cancel').onclick = closeSheet;
 $('sheet-bg').onclick = closeSheet;
@@ -532,7 +538,7 @@ let saving = false;
 async function saveDraft(more) {
   if (saving || !draft) return;
   draft.reading = $('s-reading').value.trim(); draft.heard = $('s-heard').value.trim();
-  draft.heardPattern = $('s-heardpat').value.trim().toUpperCase(); draft.note = $('s-note').value.trim();
+  draft.note = $('s-note').value.trim();
   draft.allSame = $('s-allsame').checked;
   if (draft.allSame && !draft.span) { toast('「同じ語もまとめて」には、語の最初と最後の字を選んでください'); return; }
   if (!draft.kind) { toast('種類（読み・抑揚・間…）を選んでください'); return; }
