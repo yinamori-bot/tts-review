@@ -183,3 +183,5 @@ p { margin: 6px 0; }
 .spot button.on.ok { background: var(--s-done); color: #fff; border-color: var(--s-done); }
 .spot button.on.ng { background: var(--s-new); color: #fff; border-color: var(--s-new); }
 .issue .member { margin-top: 4px; padding-left: 8px; border-left: 3px solid var(--border); }
+.round { margin-top: 10px; font-size: 13px; font-weight: 600; color: var(--muted, #888); }
+.alt .choices { margin-top: 6px; }

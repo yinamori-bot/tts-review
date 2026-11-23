@@ -612,20 +612,29 @@ function spotsHtml(i, a) {
   return `<div class="spots">${grp.map(g => `<div class="spot"><span>「${esc(g.span?.text || g.kind)}」</span>
     <button data-spot="${g.id}" data-sv="ok" class="${sp[g.id] === 'ok' ? 'on ok' : ''}">良い</button><button data-spot="${g.id}" data-sv="ng" class="${sp[g.id] === 'ng' ? 'on ng' : ''}">だめ</button></div>`).join('')}</div>`;
 }
-const shortLabel = a => (a.label.match(/^案\s*\d+/) || [a.label])[0];
 function proposalsHtml(i, as) {
   const d = i.decision || {};
+  // 返事ごと（何回目の案か）に見出しを付ける。最終判断は各案の行の「これにする」で選ぶ
+  // （前は下に「案1にする」を並べていたが、回をまたぐと同じ名前が並び、別の回の案1を選んでしまった）
+  const rounds = [...new Set(as.map(a => a.created || ''))];
+  let prev = null;
   const rows = as.map(a => {
     const v = i.verdicts[a.id] || {};
-    return `<div class="alt" data-alt="${a.id}">
+    const r = a.created || '';
+    const hdr = rounds.length > 1 && r !== prev ? `<div class="round">${rounds.indexOf(r) + 1}回目の案${rounds.indexOf(r) === rounds.length - 1 ? '（最新）' : ''}</div>` : '';
+    prev = r;
+    return `${hdr}<div class="alt" data-alt="${a.id}">
       <div class="arow"><button class="pbtn" data-act="alt">▶</button>
         <div><div class="lbl">${esc(a.label)}</div>${a.note ? `<div class="muted small">${esc(a.note)}</div>` : ''}</div></div>
       <div class="verdicts">${RATE.map(([k, t]) => `<button data-v="${k}" class="${v.v === k ? 'on' : ''}">${t}</button>`).join('')}</div>
       ${spotsHtml(i, a)}
       <input data-act="vnote" placeholder="この案へのコメント" value="${esc(v.note || '')}">
+      <div class="choices"><button data-choice="${a.id}" class="${d.choice === a.id ? 'on' : ''}">${d.choice === a.id ? '★ この案に決めた' : 'この案にする'}</button></div>
     </div>`;
   }).join('');
-  const choices = as.map(a => `<button data-choice="${a.id}" class="${d.choice === a.id ? 'on' : ''}">${esc(shortLabel(a))}にする</button>`).join('')
+  const chosen = as.find(a => a.id === d.choice);
+  const roundOf = a => rounds.length > 1 ? `${rounds.indexOf(a.created || '') + 1}回目の` : '';
+  const choices = `<div class="muted small" style="flex:1 1 100%">${chosen ? `決めた案: ${esc(roundOf(chosen) + chosen.label)}` : d.choice === 'none' ? '' : 'まだ決めていません。採る案の「この案にする」を押すか、'}</div>`
     + `<button data-choice="none" class="none ${d.choice === 'none' ? 'on' : ''}">全部不採用</button>`;
   const past = (i.pastDecisions || []).filter(p => p.instruction).map(p => `<div class="muted small">前に出した指示: ${esc(p.instruction)}</div>`).join('');
   const grp = groupOf(i);
