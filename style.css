@@ -29,6 +29,8 @@ body {
   padding-bottom: calc(env(safe-area-inset-bottom) + 24px);
 }
 body.has-player { padding-bottom: calc(env(safe-area-inset-bottom) + 150px); }
+body.tab-issues .player { display: none; }
+body.has-player.tab-issues { padding-bottom: calc(env(safe-area-inset-bottom) + 24px); }
 button, select, input, textarea { font: inherit; color: inherit; }
 [hidden] { display: none !important; }
 

@@ -230,7 +230,7 @@ function goHome() {
   $('title').textContent = '読み上げ修正';
   $('back').hidden = true; $('tabs').hidden = true; $('filter').hidden = true;
   $('v-home').hidden = false; $('v-chapter').hidden = true;
-  $('player').hidden = true; document.body.classList.remove('has-player');
+  $('player').hidden = true; document.body.classList.remove('has-player', 'tab-issues');
   history.replaceState(null, '', location.pathname);
   renderHome();
 }
@@ -240,6 +240,7 @@ function showTab(t) {
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
   $('v-text').hidden = t !== 'text'; $('v-issues').hidden = t !== 'issues';
   $('filter').hidden = t !== 'issues';      // 指摘前・対応中・済み・すべて は上の帯に出し、一覧を下へ送っても消えない
+  document.body.classList.toggle('tab-issues', t === 'issues');  // 指摘画面では再生バーと印・指摘の送りを隠す
   if (t === 'text' && curIdx >= 0) scrollToCur(true);
 }
 document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => showTab(b.dataset.tab));
