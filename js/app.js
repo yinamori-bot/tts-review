@@ -668,25 +668,41 @@ function proposalsHtml(i, as) {
 
 // 一括の確認: 講の中の同じ語を同じ直し方で直した文を並べ、○（これで良い）／×（だめ）を付けてもらう
 const skippedOf = i => (i.replies || []).flatMap(r => r.skipped || []);
+// 同じ文に案が複数あるとき（作り直しを重ねたときなど）は、文を1回だけ出して案をその下に並べる
+function batchGroups(bat) {
+  const m = new Map();
+  for (const a of bat) { if (!m.has(a.unit)) m.set(a.unit, []); m.get(a.unit).push(a); }
+  return [...m.entries()].sort((x, y) => x[0] - y[0]);
+}
+// その文の判断が済んだか: ○ の案がある、または全部の案に × が付いた
+const unitDone = (i, as) => as.some(a => i.verdicts[a.id]?.v === 'good') || as.every(a => i.verdicts[a.id]?.v === 'reject');
 function batchHtml(i, bat) {
-  const rated = bat.filter(a => i.verdicts[a.id]?.v).length;
-  const rows = bat.map(a => {
-    const v = i.verdicts[a.id] || {};
-    const u = ch.units[a.unit];
-    return `<div class="alt balt" data-alt="${a.id}">
-      <div class="small muted">#${a.unit + 1}・${fmt(u?.t0 ?? 0)}${a.note ? '・' + esc(a.note) : ''}</div>
-      <div class="btxt">${esc(a.unitText || u?.display || '')}</div>
-      <div class="arow"><button class="pbtn" data-act="borig" data-k="${a.unit}" title="元の音">元</button><button class="pbtn" data-act="alt" title="直した音">新</button>
-        <div class="verdicts" style="flex:1;margin-top:0">${[['good', '○ これで良い'], ['reject', '× だめ']].map(([k, t]) => `<button data-v="${k}" class="${v.v === k ? 'on' : ''}">${t}</button>`).join('')}</div></div>
-      ${v.v === 'reject' ? `<input data-act="vnote" placeholder="どこがだめか（任意）" value="${esc(v.note || '')}">` : ''}
-      <button data-act="onbase" class="small-btn">この音で、ほかの所を指摘</button>
+  const groups = batchGroups(bat);
+  const rated = groups.filter(([, as]) => unitDone(i, as)).length;
+  const multi = groups.some(([, as]) => as.length > 1);
+  const rows = groups.map(([k, as]) => {
+    const u = ch.units[k];
+    const cands = as.map((a, n) => {
+      const v = i.verdicts[a.id] || {};
+      return `<div class="balt" data-alt="${a.id}">
+        ${as.length > 1 || a.note ? `<div class="small muted">${as.length > 1 ? `案${n + 1}` : ''}${as.length > 1 && a.note ? '・' : ''}${esc(a.note || '')}</div>` : ''}
+        <div class="arow"><button class="pbtn" data-act="alt" title="直した音">新</button>
+          <div class="verdicts" style="flex:1;margin-top:0">${[['good', '○ これで良い'], ['reject', '× だめ']].map(([kk, t]) => `<button data-v="${kk}" class="${v.v === kk ? 'on' : ''}">${t}</button>`).join('')}</div></div>
+        ${v.v === 'reject' ? `<input data-act="vnote" placeholder="どこがだめか（任意）" value="${esc(v.note || '')}">` : ''}
+        <button data-act="onbase" class="small-btn">この音で、ほかの所を指摘</button>
+      </div>`;
+    }).join('');
+    return `<div class="alt bunit">
+      <div class="small muted">#${k + 1}・${fmt(u?.t0 ?? 0)}${as.length > 1 ? `・案 ${as.length} つ（良いものを1つ ○）` : ''}</div>
+      <div class="arow"><button class="pbtn" data-act="borig" data-k="${k}" title="元の音">元</button><div class="btxt" style="flex:1">${esc(as[0].unitText || u?.display || '')}</div></div>
+      ${cands}
     </div>`;
   }).join('');
   const sk = skippedOf(i).map(x => `<li>#${x.unit + 1} ${esc(x.text || ch.units[x.unit]?.display || '')}<span class="muted">（${esc(x.reason || '')}）</span></li>`).join('');
   return `<div class="props batch">
-    <div class="props-h">一括の確認 ${bat.length} 文（${rated}/${bat.length} 済み）</div>
+    <div class="props-h">一括の確認 ${groups.length} 文（${rated}/${groups.length} 済み）</div>
     <p class="muted small">同じ語を同じ直し方で直した文です。「元」と「新」を聞き比べ、だめなものだけ × を。</p>
-    ${bat.length ? `<button data-act="ballgood" class="small-btn">まだ付けていない文を全部 ○ にする</button>` : ''}
+    ${groups.length ? `<button data-act="ballgood" class="small-btn">まだ付けていない文を全部 ○ にする${multi ? '（案が複数ある文は除く）' : ''}</button>` : ''}
     ${rows}
     ${sk ? `<div class="muted small" style="margin-top:8px">触っていない文:</div><ul class="skipped small">${sk}</ul>` : ''}
   </div>`;
@@ -760,7 +776,7 @@ $('issues').addEventListener('click', async e => {
   }
   const card = e.target.closest('.issue'); if (!card) return;
   const i = issues.find(x => x.id === card.dataset.id); if (!i) return;
-  const altEl = e.target.closest('.alt');
+  const altEl = e.target.closest('[data-alt]');
   const a = altEl ? (alts.get(i.id) || []).find(x => x.id === altEl.dataset.alt) : null;
   const act = e.target.dataset.act, v = e.target.dataset.v;
   if (act === 'orig') {
@@ -795,7 +811,9 @@ $('issues').addEventListener('click', async e => {
   }
   else if (act === 'ballgood') {
     const now = new Date().toISOString();
-    for (const b of (alts.get(i.id) || []).filter(x => x.batch)) if (!i.verdicts[b.id]?.v) i.verdicts[b.id] = Object.assign(i.verdicts[b.id] || {}, { v: 'good', at: now });
+    // 案が1つだけで、まだ何も付けていない文だけ ○ にする（案が複数ある文は、どれが良いか選んでもらう）
+    for (const [, as] of batchGroups((alts.get(i.id) || []).filter(x => x.batch)))
+      if (as.length === 1 && !i.verdicts[as[0].id]?.v) i.verdicts[as[0].id] = Object.assign(i.verdicts[as[0].id] || {}, { v: 'good', at: now });
     await touch(i);
   }
   else if (act === 'close') { i.stage = 'done'; i.resolution = i.resolution || 'closed'; await touch(i); }
@@ -804,6 +822,8 @@ $('issues').addEventListener('click', async e => {
     const cur = i.verdicts[a.id] || {};
     cur.v = cur.v === v ? '' : v; cur.at = new Date().toISOString();
     i.verdicts[a.id] = cur;
+    // 一括の確認で同じ文に案が複数あるときは、○ は1つだけ（ほかの ○ を外す）
+    if (a.batch && cur.v === 'good') for (const b of (alts.get(i.id) || [])) if (b.batch && b.unit === a.unit && b.id !== a.id && i.verdicts[b.id]?.v === 'good') i.verdicts[b.id].v = '';
     await touch(i);
   } else if (e.target.dataset.choice) {
     const c = e.target.dataset.choice;
@@ -836,7 +856,7 @@ $('issues').addEventListener('change', async e => {
   }
   if (act !== 'vnote') return;
   const i = issues.find(x => x.id === e.target.closest('.issue').dataset.id);
-  const id = e.target.closest('.alt').dataset.alt;
+  const id = e.target.closest('[data-alt]').dataset.alt;
   i.verdicts = i.verdicts || {};
   i.verdicts[id] = Object.assign(i.verdicts[id] || {}, { note: e.target.value.trim(), at: new Date().toISOString() });
   i.unsent = true; i.updated = new Date().toISOString();
