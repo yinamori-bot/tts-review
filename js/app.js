@@ -29,7 +29,7 @@ let audioURL = null;
 let curIdx = -1;
 let unitEls = [];
 let manualScrollAt = 0;
-let seg = null;           // { end, then } 範囲再生
+let seg = null;           // { start, end, then } 範囲再生
 let filter = 'open';
 let altURLs = new Map();
 
@@ -365,7 +365,11 @@ audio.addEventListener('loadedmetadata', () => {
 });
 function tick() {
   if (ch && audio.src) {
-    if (seg && audio.currentTime >= seg.end) { const then = seg.then; seg = null; audio.pause(); then?.(); }
+    // iPhone は、読み込み中の位置合わせを無視して講の頭から鳴らすことがある。範囲の外なら音を消して合わせ直す
+    if (seg && !audio.seeking && (audio.currentTime < seg.start - 0.3 || audio.currentTime > seg.end + 1)) {
+      audio.muted = true; try { audio.currentTime = seg.start; } catch {}
+    } else if (seg && audio.muted && !audio.seeking) audio.muted = false;
+    if (seg && audio.currentTime >= seg.end && audio.currentTime <= seg.end + 1) { const then = seg.then; seg = null; audio.muted = false; audio.pause(); then?.(); }
     setCur(findUnit(audio.currentTime));
     updateTime();
   }
@@ -385,7 +389,7 @@ audio.addEventListener('pause', () => { $('play').textContent = '▶'; $('follow
 audio.addEventListener('timeupdate', () => { if (document.hidden) tick(); });
 audio.addEventListener('ended', () => { $('play').textContent = '▶'; });
 
-function stopSeg() { seg = null; }
+function stopSeg() { seg = null; audio.muted = false; }
 $('play').onclick = () => {
   altAudio.pause();
   if (audio.paused) { stopSeg(); audio.play(); } else audio.pause();
@@ -416,8 +420,9 @@ $('seek').addEventListener('change', e => {
 // ある範囲だけ鳴らす（文を聞く・元の音）
 function playRange(t0, t1, then) {
   altAudio.pause();
-  seekTo(Math.max(0, t0 - 0.05));
-  seg = { end: t1 + 0.15, then };
+  const start = Math.max(0, t0 - 0.05);
+  seekTo(start);
+  seg = { start, end: t1 + 0.15, then };
   audio.play().catch(() => {});
 }
 function playUnit(k, then) { const u = ch.units[k]; playRange(u.t0, u.t1, then); }
