@@ -529,9 +529,11 @@ function renderKind() {
 }
 document.querySelectorAll('#s-kinds button').forEach(b => b.onclick = () => { draft.kind = draft.kind === b.dataset.k ? '' : b.dataset.k; renderKind(); });
 document.querySelectorAll('#s-gap button').forEach(b => b.onclick = () => { draft.gap = draft.gap === b.dataset.g ? '' : b.dataset.g; renderKind(); });
-function renderPat() { $('s-pat').textContent = draft.pattern ? draft.pattern.split('').join(' ') + `（${draft.pattern.length}字）` : '（未入力）'; }
+function renderPat() { $('s-pat').textContent = draft.pattern ? draft.pattern.replace(/\./g, '＊').split('').join(' ') + `（${draft.pattern.length}字）` : '（未入力）'; }
 $('p-u').onclick = () => { draft.pattern += 'U'; renderPat(); };
 $('p-d').onclick = () => { draft.pattern += 'D'; renderPat(); };
+// 高くても低くてもよい字（例: 「方法で」の「ほ」）。Mac には . として渡る（accent.py の「問わない拍」）
+$('p-x').onclick = () => { draft.pattern += '.'; renderPat(); };
 $('p-bs').onclick = () => { draft.pattern = draft.pattern.slice(0, -1); renderPat(); };
 $('p-clr').onclick = () => { draft.pattern = ''; renderPat(); };
 // いまの聞こえ方も同じ U/D ボタンで入れる（前は文字入力だった）
@@ -601,7 +603,7 @@ function describe(i) {
   const w = i.span ? `「${esc(i.span.text)}」` : '';
   const out = [];
   if (i.kind === '読み') out.push(`読み${w}${i.reading ? ' → <b>' + esc(i.reading) + '</b>' : ''}${i.heard ? `（聞こえ: ${esc(i.heard)}）` : ''}`);
-  else if (i.kind === '抑揚') out.push(`抑揚${w}${i.pattern ? ' → <b>' + esc(i.pattern) + '</b>' : ''}${i.heardPattern ? `（聞こえ: ${esc(i.heardPattern)}）` : ''}`);
+  else if (i.kind === '抑揚') out.push(`抑揚${w}${i.pattern ? ' → <b>' + esc(i.pattern.replace(/\./g, '＊')) + '</b>' : ''}${i.heardPattern ? `（聞こえ: ${esc(i.heardPattern)}）` : ''}`);
   else if (i.kind === '間') out.push(`間${w}${i.gap ? '：<b>' + esc(i.gap) + '</b>' : ''}`);
   else out.push(`${esc(i.kind === '語尾' ? '語尾の切れ' : i.kind === '崩れ' ? '音の崩れ' : i.kind)}${w}`);
   if (i.baseAlt) out.push(`<span class="muted small">土台: ${esc(i.baseLabel || i.baseAlt)}</span>`);
