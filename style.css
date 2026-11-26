@@ -189,3 +189,7 @@ p { margin: 6px 0; }
 .issue .member { margin-top: 4px; padding-left: 8px; border-left: 3px solid var(--border); }
 .round { margin-top: 10px; font-size: 13px; font-weight: 600; color: var(--muted, #888); }
 .alt .choices { margin-top: 6px; }
+.batch .bpick { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+.batch .bpick button { flex: 1 1 22%; padding: 9px 0; border-radius: 10px; font-size: 14px; }
+.batch .bpick button.on { background: var(--s-done); color: #fff; border-color: var(--s-done); }
+.batch .bpick button.on.orig { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }

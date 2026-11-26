@@ -673,7 +673,8 @@ function proposalsHtml(i, as) {
   </div>`;
 }
 
-// 一括の確認: 講の中の同じ語を同じ直し方で直した文を並べ、○（これで良い）／×（だめ）を付けてもらう
+// 一括の確認: 講の中の同じ語を同じ直し方で直した文を並べる。
+// 各案の評価（◎○△×、Mac への手がかり）と、その文で何を採るか（元のまま／案のどれか）は別に付ける。
 const skippedOf = i => (i.replies || []).flatMap(r => r.skipped || []);
 // 同じ文に案が複数あるとき（作り直しを重ねたときなど）は、文を1回だけ出して案をその下に並べる
 function batchGroups(bat) {
@@ -681,35 +682,43 @@ function batchGroups(bat) {
   for (const a of bat) { if (!m.has(a.unit)) m.set(a.unit, []); m.get(a.unit).push(a); }
   return [...m.entries()].sort((x, y) => x[0] - y[0]);
 }
-// その文の判断が済んだか: ○ の案がある、または全部の案に × が付いた
-const unitDone = (i, as) => as.some(a => i.verdicts[a.id]?.v === 'good') || as.every(a => i.verdicts[a.id]?.v === 'reject');
+// 文ごとの採用: i.bpick[文の番号] = 案のid | 'orig'。前の版（○ が採用を兼ねていた）は ○ の案を採用として読む
+function picksOf(i) {
+  if (i.bpick) return i.bpick;
+  const p = {};
+  for (const a of (alts.get(i.id) || [])) if (a.batch && i.verdicts?.[a.id]?.v === 'good' && p[a.unit] == null) p[a.unit] = a.id;
+  return p;
+}
 function batchHtml(i, bat) {
   const groups = batchGroups(bat);
-  const rated = groups.filter(([, as]) => unitDone(i, as)).length;
-  const multi = groups.some(([, as]) => as.length > 1);
+  const pk = picksOf(i);
+  const rated = groups.filter(([k]) => pk[k]).length;
   const rows = groups.map(([k, as]) => {
     const u = ch.units[k];
     const cands = as.map((a, n) => {
       const v = i.verdicts[a.id] || {};
       return `<div class="balt" data-alt="${a.id}">
         ${as.length > 1 || a.note ? `<div class="small muted">${as.length > 1 ? `案${n + 1}` : ''}${as.length > 1 && a.note ? '・' : ''}${esc(a.note || '')}</div>` : ''}
-        <div class="arow"><button class="pbtn" data-act="alt" title="直した音">新</button>
-          <div class="verdicts" style="flex:1;margin-top:0">${[['good', '○ これで良い'], ['reject', '× だめ']].map(([kk, t]) => `<button data-v="${kk}" class="${v.v === kk ? 'on' : ''}">${t}</button>`).join('')}</div></div>
-        ${v.v === 'reject' ? `<input data-act="vnote" placeholder="どこがだめか（任意）" value="${esc(v.note || '')}">` : ''}
+        <div class="arow"><button class="pbtn" data-act="alt" title="直した音">${as.length > 1 ? n + 1 : '新'}</button>
+          <div class="verdicts" style="flex:1;margin-top:0">${RATE.map(([kk, t]) => `<button data-v="${kk}" class="${v.v === kk ? 'on' : ''}">${t}</button>`).join('')}</div></div>
+        ${v.v === 'close' || v.v === 'reject' || v.note ? `<input data-act="vnote" placeholder="どこがだめか（任意）" value="${esc(v.note || '')}">` : ''}
         <button data-act="onbase" class="small-btn">この音で、ほかの所を指摘</button>
       </div>`;
     }).join('');
+    const opts = [['orig', '元のまま'], ...as.map((a, n) => [a.id, as.length > 1 ? `案${n + 1}` : '新'])];
     return `<div class="alt bunit">
-      <div class="small muted">#${k + 1}・${fmt(u?.t0 ?? 0)}${as.length > 1 ? `・案 ${as.length} つ（良いものを1つ ○）` : ''}</div>
+      <div class="small muted">#${k + 1}・${fmt(u?.t0 ?? 0)}${as.length > 1 ? `・案 ${as.length} つ` : ''}</div>
       <div class="arow"><button class="pbtn" data-act="borig" data-k="${k}" title="元の音">元</button><div class="btxt" style="flex:1">${esc(as[0].unitText || u?.display || '')}</div></div>
       ${cands}
+      <div class="bpick"><span class="small muted">採用</span>${opts.map(([id, t]) => `<button data-bpick="${id}" data-k="${k}" class="${pk[k] === id ? 'on' + (id === 'orig' ? ' orig' : '') : ''}">${pk[k] === id ? '★ ' : ''}${t}</button>`).join('')}</div>
     </div>`;
   }).join('');
   const sk = skippedOf(i).map(x => `<li>#${x.unit + 1} ${esc(x.text || ch.units[x.unit]?.display || '')}<span class="muted">（${esc(x.reason || '')}）</span></li>`).join('');
+  const single = groups.some(([k, as]) => as.length === 1 && !pk[k]);
   return `<div class="props batch">
-    <div class="props-h">一括の確認 ${groups.length} 文（${rated}/${groups.length} 済み）</div>
-    <p class="muted small">同じ語を同じ直し方で直した文です。「元」と「新」を聞き比べ、だめなものだけ × を。</p>
-    ${groups.length ? `<button data-act="ballgood" class="small-btn">まだ付けていない文を全部 ○ にする${multi ? '（案が複数ある文は除く）' : ''}</button>` : ''}
+    <div class="props-h">一括の確認 ${groups.length} 文（採用を決めた ${rated}/${groups.length}）</div>
+    <p class="muted small">同じ語を同じ直し方で直した文です。「元」と「新」を聞き比べ、案ごとの評価（◎○△×）と、その文で採るもの（元のまま／新）を別々に付けてください。評価は付けなくても構いません。</p>
+    ${single ? '<button data-act="ballgood" class="small-btn">採用を決めていない文のうち、案が1つの文を全部「新」にする</button>' : ''}
     ${rows}
     ${sk ? `<div class="muted small" style="margin-top:8px">触っていない文:</div><ul class="skipped small">${sk}</ul>` : ''}
   </div>`;
@@ -817,10 +826,18 @@ $('issues').addEventListener('click', async e => {
     playUnit(+btn.dataset.k, () => btn.classList.remove('playing-btn'));
   }
   else if (act === 'ballgood') {
-    const now = new Date().toISOString();
-    // 案が1つだけで、まだ何も付けていない文だけ ○ にする（案が複数ある文は、どれが良いか選んでもらう）
-    for (const [, as] of batchGroups((alts.get(i.id) || []).filter(x => x.batch)))
-      if (as.length === 1 && !i.verdicts[as[0].id]?.v) i.verdicts[as[0].id] = Object.assign(i.verdicts[as[0].id] || {}, { v: 'good', at: now });
+    // 案が1つだけで、まだ採用を決めていない文を「新」にする（評価は付けない）
+    i.bpick = { ...picksOf(i) };
+    for (const [k, as] of batchGroups((alts.get(i.id) || []).filter(x => x.batch)))
+      if (as.length === 1 && !i.bpick[k]) i.bpick[k] = as[0].id;
+    i.bpickAt = new Date().toISOString();
+    await touch(i);
+  }
+  else if (e.target.dataset.bpick) {
+    const k = +e.target.dataset.k, c = e.target.dataset.bpick;
+    i.bpick = { ...picksOf(i) };
+    if (i.bpick[k] === c) delete i.bpick[k]; else i.bpick[k] = c;
+    i.bpickAt = new Date().toISOString();
     await touch(i);
   }
   else if (act === 'close') { i.stage = 'done'; i.resolution = i.resolution || 'closed'; await touch(i); }
@@ -828,9 +845,9 @@ $('issues').addEventListener('click', async e => {
   else if (v && a) {
     const cur = i.verdicts[a.id] || {};
     cur.v = cur.v === v ? '' : v; cur.at = new Date().toISOString();
+    // 一括の確認では、評価を変える前に、前の版の「○＝採用」を採用として残しておく
+    if (a.batch && !i.bpick) i.bpick = { ...picksOf(i) };
     i.verdicts[a.id] = cur;
-    // 一括の確認で同じ文に案が複数あるときは、○ は1つだけ（ほかの ○ を外す）
-    if (a.batch && cur.v === 'good') for (const b of (alts.get(i.id) || [])) if (b.batch && b.unit === a.unit && b.id !== a.id && i.verdicts[b.id]?.v === 'good') i.verdicts[b.id].v = '';
     await touch(i);
   } else if (e.target.dataset.choice) {
     const c = e.target.dataset.choice;
@@ -881,7 +898,7 @@ $('send').onclick = async () => {
   if (noInstr.length && !confirm(`「全部不採用」で新しい指示が空の指摘が ${noInstr.length} 件あります。このまま渡しますか？`)) return;
   // 渡したあとの段階で書き出す（Macが読む時点では「返事待ち」になっているので）
   const nextStage = i => !i.unsent ? i.stage
-    : (i.stage === 'new' || (i.stage === 'answered' && (i.decision?.choice === 'none' || Object.values(i.verdicts || {}).some(v => v.v || v.note)))) ? 'sent' : i.stage;
+    : (i.stage === 'new' || (i.stage === 'answered' && (i.decision?.choice === 'none' || Object.keys(picksOf(i)).length || Object.values(i.verdicts || {}).some(v => v.v || v.note)))) ? 'sent' : i.stage;
   const out = {
     format: 'tts-review/feedback', version: 1, exportedAt: new Date().toISOString(),
     chapter: { id: ch.id, title: ch.title, audioId: ch.audioId, passed: !!ch.passed },
@@ -898,6 +915,7 @@ $('send').onclick = async () => {
         .filter(({ v, sp }) => v.v || v.note || Object.keys(sp).length)
         .map(({ alt, v, sp }) => ({ alt, verdict: v.v || '', note: v.note || '', at: v.at, ...(Object.keys(sp).length ? { spots: sp } : {}) })),
       group: i.group || null, groupOf: i.groupOf || null,
+      ...((alts.get(i.id) || []).some(a => a.batch) ? { batchPicks: Object.entries(picksOf(i)).map(([unit, choice]) => ({ unit: +unit, choice })) } : {}),
       decision: i.decision ? { choice: i.decision.choice, instruction: i.decision.instruction || '', at: i.decision.at } : null,
       replies: (i.replies || []).map(r => r.id),
     })),
