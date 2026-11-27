@@ -105,7 +105,7 @@ $('import').onchange = async e => {
 async function importChapter(d) {
   const old = await db.get('chapters', d.id);
   const c = {
-    id: d.id, title: d.title, heading: d.heading, album: d.album, artist: d.artist,
+    id: d.id, title: d.title, heading: d.heading, album: d.album, artist: d.artist, folder: d.folder || '',
     audioId: d.audioId, audioFile: d.audioFile, audioSize: d.audioSize, duration: d.duration,
     units: d.units, importedAt: new Date().toISOString(),
     hasAudio: false, passed: old?.passed || false, prevAudioId: null,
@@ -733,7 +733,7 @@ function renderIssues() {
   const list = issues.filter(i => !isMember(i) && (filter === 'all' || (filter === 'done' ? i.stage === 'done' : i.stage !== 'done')))
     .sort((a, b) => (STAGE_RANK[b.stage] - STAGE_RANK[a.stage]) || (a.unit - b.unit));
   const unsent = issues.filter(i => i.unsent).length;
-  $('send-info').textContent = unsent ? `まだMacに渡していない変更: ${unsent} 件` : (ch.sentAt ? `最後に渡した: ${new Date(ch.sentAt).toLocaleString('ja-JP')}` : '');
+  $('send-info').textContent = (unsent ? `まだMacに渡していない変更: ${unsent} 件` : (ch.sentAt ? `最後に渡した: ${new Date(ch.sentAt).toLocaleString('ja-JP')}` : '')) + `　保存先: ${saveDir(ch)}`;
   if (!list.length) { $('issues').innerHTML = `<p class="muted card">${filter === 'done' ? '済みの指摘はありません' : '対応中の指摘はありません。本文を聞いて、気になったら「⚑ 指摘」を押してください。'}</p>`; return; }
   $('issues').innerHTML = list.map(i => {
     const as = (alts.get(i.id) || []).sort((a, b) => (a.created || '').localeCompare(b.created || '') || a.label.localeCompare(b.label, 'ja'));
@@ -875,7 +875,7 @@ $('issues').addEventListener('change', async e => {
     i.decision.instruction = e.target.value.trim(); i.decision.at = new Date().toISOString();
     i.unsent = true; i.updated = new Date().toISOString();
     await db.put('issues', i);
-    $('send-info').textContent = `まだMacに渡していない変更: ${issues.filter(x => x.unsent).length} 件`;
+    $('send-info').textContent = `まだMacに渡していない変更: ${issues.filter(x => x.unsent).length} 件　保存先: ${saveDir(ch)}`;
     return;
   }
   if (act !== 'vnote') return;
@@ -885,13 +885,15 @@ $('issues').addEventListener('change', async e => {
   i.verdicts[id] = Object.assign(i.verdicts[id] || {}, { note: e.target.value.trim(), at: new Date().toISOString() });
   i.unsent = true; i.updated = new Date().toISOString();
   await db.put('issues', i);
-  $('send-info').textContent = `まだMacに渡していない変更: ${issues.filter(x => x.unsent).length} 件`;
+  $('send-info').textContent = `まだMacに渡していない変更: ${issues.filter(x => x.unsent).length} 件　保存先: ${saveDir(ch)}`;
 });
 async function touch(i) { i.unsent = true; i.updated = new Date().toISOString(); await db.put('issues', i); markDots(); renderIssues(); }
 
 $('passed').onchange = async e => { ch.passed = e.target.checked; ch.passedChanged = true; await db.put('chapters', ch); };
 
 // ---------------------------------------------------------------- Macに渡す
+// 保存先: 修正作業 / GA104(高橋巖) / 第1講（Macが講の json に書いた folder）
+const saveDir = c => ['修正作業', ...(c.folder ? c.folder.split('/') : [])].join(' / ');
 $('send').onclick = async () => {
   const name = `指摘_${ch.id}.json`;
   const noInstr = issues.filter(i => i.decision?.choice === 'none' && !i.decision.instruction);
@@ -934,7 +936,7 @@ $('send').onclick = async () => {
   }
   ch.sentAt = new Date().toISOString(); await db.put('chapters', ch);
   markDots(); renderIssues();
-  toast('「ファイルに保存」→ iCloud Drive の「修正作業」フォルダに保存してください（同じ名前は置き換え）', 6000);
+  toast(`「ファイルに保存」→ iCloud Drive の「${saveDir(ch)}」に保存してください（同じ名前は置き換え）`, 8000);
 };
 
 // ---------------------------------------------------------------- 講を消す
